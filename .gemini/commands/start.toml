@@ -1,0 +1,53 @@
+description = "Start or resume the migration project — orient, show progress, and pick ONE flow to work on next"
+prompt = """
+--- DATAPREP MIGRATION — START / RESUME ---
+
+Goal of this command: orient the user and get them working on exactly ONE flow. Never kick off
+bulk work. Discovery (read-only inventory) is the ONLY bulk-allowed step. Keep it short.
+
+1. READ STATE (read-only):
+   - docs/catalog.json — per-flow status (Verified / In progress / Not started / Failed), if present
+   - output/backlog.md — ranked migration order + dependencies, if present
+   - .env (presence only — check IF Dataprep API creds exist; NEVER print secrets) and .env.example
+   - git: current branch and whether the tree is clean
+
+2. DECIDE: first-time setup vs resume.
+
+   IF no catalog.json AND no backlog.md → FIRST-TIME SETUP:
+   - Confirm the essentials, asking only what you can't infer:
+       * GCP project + the disposable staging dataset name (default dataprep_migration_staging,
+         with a default table expiration so it self-cleans).
+       * Is git initialized? If not, suggest `git init`.
+   - Detect the export path (API-OPTIONAL — everything downstream is identical either way):
+       * IF Dataprep API creds exist in .env → offer the fast path: auto-sweep `GET /v4/flows` to
+         list, then bulk-export each `GET /v4/flows/{id}/package` ZIP into context/<plan>/<flow>/.
+       * IF NO API creds (business unit may have none) → guide the manual path: UI "Export Flow"
+         (yields the IDENTICAL ZIP) into context/, OR paste a flow list (names/ids) to seed the
+         catalog now and export packages just-in-time per flow.
+   - Once packages OR a pasted list exist, offer DISCOVERY — the ONE bulk step (read-only):
+       @flow-inventory across context/ → write output/backlog.md + docs/catalog.json
+       (backlog, per-plan DAG, per-flow catalog entries incl. native-gen eligibility).
+   - Report what you set up. Then go to step 4.
+
+   ELSE → RESUME:
+   - Greet with a one-line status from catalog.json:
+       "X of N flows migrated · Y verified · Z in progress · over P plans."
+   - If anything is `In progress` or `Failed` → surface it FIRST: that gets finished before
+     anything new is started.
+   - Otherwise show the next 1–3 flows in dependency order from the backlog (upstream first).
+
+3. (No bulk actions. Discovery is the only thing that may span all flows, and only because it's read-only.)
+
+4. PICK ONE:
+   - Ask: "Which ONE flow do you want to work on?" (or "Which plan do you want to plan out first?")
+   - A Plan is the orchestration unit (→ Dataform tag-group + schedule, or a Composer DAG). The user
+     works a Plan by planning it (run order + schedule into plans/<plan>/README.md), then migrating
+     its flows one at a time in dependency order.
+   - When they choose a flow, hand off to `/migrate context/<plan>/<flow>/`. The /migrate command
+     CREATES the per-flow folder (definitions/<plan>/<flow>/ or python/<plan>/<flow>/) and the
+     branch `migrate/<plan>-<flow>` from canonical catalog names — never pre-create or hand-name them.
+   - DO NOT begin a second flow until the current one is verified + committed. If the user asks
+     to "do them all," explain the one-at-a-time rule and start with just the first.
+
+End with: the single chosen flow (or plan) + the immediate next action. Nothing else.
+"""

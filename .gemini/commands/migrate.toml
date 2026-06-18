@@ -1,0 +1,61 @@
+description = "Migrate ONE Dataprep flow end-to-end: inventory → translate (SQL/Python) → compile & dry-run → parity audit → document → commit. Usage: /migrate context/<plan>/<flow>/"
+prompt = """
+--- MIGRATE ONE DATAPREP FLOW ---
+
+Input: a path to an exported Dataprep flow package under `context/<plan>/<flow>/` (argument).
+If no argument was given, ask which flow in ./context/ to migrate, then stop and wait.
+
+ONE FLOW AT A TIME. Bulk migration is REFUSED. One flow = one branch (migrate/<plan>-<flow>)
+= one session = one commit. Finish in-progress flows first.
+
+Run the golden path. Keep the user informed at each step; stop on any hard gate.
+
+0. SET UP THE FLOW FOLDER + BRANCH
+   From the catalog metadata (canonical plan + flow names — never hand-named), CREATE the
+   per-flow folder one at a time:
+     - SQL    → definitions/<plan>/<flow>/   (<flow>.sqlx, <flow>_parity.sqlx, README.md)
+     - Python → python/<plan>/<flow>/        (<flow>.py, parity.py, README.md)
+   Confirm git tree is clean, then create/switch to branch `migrate/<plan>-<flow>`.
+
+1. INVENTORY
+   Invoke @flow-inventory on the package. Capture: sources, output table(s), ordered steps,
+   inter-flow dependencies, complexity, native-gen eligibility, and the recommended TARGET
+   (SQL via Dataform / Python / Hybrid). Show a one-screen summary. Surface any UNKNOWN/ambiguous
+   steps now. If this flow depends on an un-migrated upstream flow, stop — migrate upstream first.
+
+2. TRANSLATE (transpile-first; native-gen optional)
+   Invoke @recipe-translator with the inventory. It TRANSPILES from raw Wrangle via the transform
+   dictionary (reusing pushdown SQL for BQ-source flows), and only uses Dataprep's own code-gen
+   (POST /v4/outputObjects/<id>/wrangleToPython — DEPRECATED, Enterprise-only, CSV-only, no
+   multi-dataset) when the inventory marks it eligible and it applies cleanly. It reshapes into one
+   commented block per recipe step (original Wrangle quoted), applying the three corruption fixes
+   (timezone-naive temporal, decimal≤38, coalesce-before-concat). Output to the per-flow folder
+   from step 0. Report any steps flagged `-- TODO: verify` — these are dictionary gaps.
+
+3. COMPILE & DRY-RUN
+   SQL: run `dataform compile` (model names must be unique / plan-aware); then a BigQuery dry-run
+   for syntax + estimated bytes. Python: lint/parse-check; dry-run the read if cheap.
+   No gcloud required — use the google-cloud-bigquery client (browser OAuth) or the console/Dataform UI.
+   If estimated scan is large, warn and wait before any real run.
+
+4. PARITY AUDIT
+   Confirm the natural/primary key with the user if not obvious. Invoke @parity-auditor:
+   it FREEZES the source via BigQuery time-travel/snapshot, runs the migrated model into the
+   staging dataset `dataprep_migration_staging` (legacy/prod is READ-ONLY; WRITE-GUARD refuses any
+   non-staging target), normalizes known-legitimate diffs, then runs the 4-tier diff
+   (schema → row count → MD5 row-hash → cell-level). Bar is EXACT match. Run side-by-side over a
+   validation window before any cutover.
+
+5. DOCUMENT & REPORT
+   Show the parity verdict (PASS/FAIL); full report at ./output/parity/<plan>/<flow>.md. Write the
+   per-flow README.md (what it does, target, run order, parity link) and update docs/catalog.json
+   status. On FAIL, point at the diverging recipe step(s); do NOT promote.
+
+6. COMMIT (only on PASS, with explicit user yes)
+   Commit this single flow on its branch. Cutover (deleting staging, retiring legacy) is a
+   separate, deliberate step — legacy stays in place until then.
+
+Never modify ./context/ (recipe inputs are read-only, gitignored). Never DDL/DML legacy/production
+tables — all writes go to the disposable staging dataset until cutover. Do NOT start a second flow
+until this one is verified + committed.
+"""

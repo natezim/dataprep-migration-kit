@@ -1,0 +1,16 @@
+# Secrets — never commit
+.env
+*.token
+
+# Raw Dataprep exports (real business logic + large binaries) — keep local by default.
+# Remove these lines if you intentionally want to version exported recipes.
+context/*.zip
+context/flow_*/
+
+# Work products
+output/data/
+output/temp/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
