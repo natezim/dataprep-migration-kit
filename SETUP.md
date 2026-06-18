@@ -48,15 +48,15 @@ Edit `workflow_settings.yaml` (Dataform):
 ## 4. First run
 
 ```
-gemini      →   /start
+gemini      →   /dp:start
 ```
 
-`/start` does first-time setup: it confirms your project/dataset, checks whether you have
+`/dp:start` does first-time setup: it confirms your project/dataset, checks whether you have
 Dataprep API access (and falls back to UI export if not), and offers to run discovery. Then:
 
 1. **Export one flow** — API (`GET /v4/flows/{id}/package`) or the UI **Export Flow** button —
    and unzip it into `context/<plan>/<flow>/`.
-2. Run **`/migrate context/<plan>/<flow>/`** for that one flow.
+2. Run **`/dp:migrate context/<plan>/<flow>/`** for that one flow.
 3. Review the output + the parity report. Commit. Then the next flow.
 
 **One flow at a time.** Bulk runs are refused by design; only read-only discovery is bulk.

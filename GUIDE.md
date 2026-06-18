@@ -63,7 +63,7 @@ nothing in auditability.
 
 ## 5. The pipeline — what happens to every flow
 
-This is the repeatable golden path. The `/migrate` command runs all six steps; you can
+This is the repeatable golden path. The `/dp:migrate` command runs all six steps; you can
 also run any agent by hand.
 
 ```
@@ -202,13 +202,13 @@ Every step is traceable to its Wrangle origin; every model is tagged by flow and
 1. Have Gemini CLI installed. (If the global starter kit is installed too, it applies on
    top — nothing to configure.)
 2. From this folder, confirm the toolkit loads: in Gemini CLI run `/info` (lists the
-   `/migrate` command and the agents) — or just check `.gemini/` exists here.
+   `/dp:migrate` command and the agents) — or just check `.gemini/` exists here.
 3. Set your Dataform project / BigQuery connection (see *Setup* below).
 
 ### Per flow (the golden path)
 1. Export the flow package from Dataprep (`GET /v4/flows/{id}/package`, **or** the UI
    "Export Flow" button — identical ZIP, no API needed) → unzip into `context/<plan>/<flow>/`.
-2. Run `/start` to pick the next flow, then `/migrate <flow>`. **One flow at a time** — finish
+2. Run `/dp:start` to pick the next flow, then `/dp:migrate <flow>`. **One flow at a time** — finish
    it end-to-end (and commit) before the next; bulk migration is refused.
 3. Read the parity report in `output/parity/`. Green → promote. Red → it tells you which step diverged.
 
@@ -275,7 +275,7 @@ toolkit and the pilot are built together:
 - [ ] `references/recipe-anatomy.md` — how to read exported recipe JSON (needs a real sample)
 - [ ] `references/dataform-conventions.md`, `references/python-lane.md`, `references/parity-harness.md`
 - [ ] `@flow-inventory`, `@recipe-translator`, `@parity-auditor` — drafted; tune on pilot
-- [ ] `/migrate` command — drafted; tune on pilot
+- [ ] `/dp:migrate` command — drafted; tune on pilot
 
 **Next concrete step:** get 2–3 real exported recipe JSONs into `context/` so the
 transform dictionary and the inventory classifier can be validated against reality.

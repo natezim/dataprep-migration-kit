@@ -129,5 +129,5 @@ The project is version-controlled with **git**. This works the same whether or n
 
 ## Commands
 
-- `/start` — orient/resume: shows progress, enforces one-flow-at-a-time, helps you pick the next.
-- `/migrate <flow>` — the golden path for ONE flow: inventory → translate → verify → document.
+- `/dp:start` — orient/resume: shows progress, enforces one-flow-at-a-time, helps you pick the next.
+- `/dp:migrate <flow>` — the golden path for ONE flow: inventory → translate → verify → document.

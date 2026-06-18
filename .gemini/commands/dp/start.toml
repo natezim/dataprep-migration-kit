@@ -43,7 +43,7 @@ bulk work. Discovery (read-only inventory) is the ONLY bulk-allowed step. Keep i
    - A Plan is the orchestration unit (→ Dataform tag-group + schedule, or a Composer DAG). The user
      works a Plan by planning it (run order + schedule into plans/<plan>/README.md), then migrating
      its flows one at a time in dependency order.
-   - When they choose a flow, hand off to `/migrate context/<plan>/<flow>/`. The /migrate command
+   - When they choose a flow, hand off to `/dp:migrate context/<plan>/<flow>/`. The /dp:migrate command
      CREATES the per-flow folder (definitions/<plan>/<flow>/ or python/<plan>/<flow>/) and the
      branch `migrate/<plan>-<flow>` from canonical catalog names — never pre-create or hand-name them.
    - DO NOT begin a second flow until the current one is verified + committed. If the user asks

@@ -23,11 +23,11 @@ you hand it to lines of business — see [GUIDE.md](GUIDE.md) §7b.
 #    dataprep-migration/context/<plan>/<flow>/
 
 # 2. From the dataprep-migration/ folder, in Gemini CLI:
-/start          # orient/resume — pick the next flow, one at a time
-/migrate <flow> # the golden path for that one flow
+/dp:start          # orient/resume — pick the next flow, one at a time
+/dp:migrate <flow> # the golden path for that one flow
 ```
 
-`/migrate` runs the full pipeline: inventory → transpile (transform dictionary, SQL or Python)
+`/dp:migrate` runs the full pipeline: inventory → transpile (transform dictionary, SQL or Python)
 → compile & dry-run → 4-tier parity audit against a frozen input → report. You get commented
 output plus a pass/fail parity report. **One flow at a time** — bulk runs are refused; only
 read-only discovery is bulk.
@@ -53,7 +53,7 @@ Composer DAG), preserving run order and schedule.
 | `plans/<plan>/README.md` | Human-readable Plan map |
 | `docs/catalog.json` + `docs/catalog.html` | Generated dashboard (host on Pages) |
 | `GEMINI.md` | Project rules + SQL-vs-Python decision rule (auto-loaded from package root) |
-| `.gemini/` | The toolkit — agents, skill, `/start` + `/migrate` commands |
+| `.gemini/` | The toolkit — agents, skill, `/dp:start` + `/dp:migrate` commands |
 
 ## Safety
 

@@ -54,7 +54,7 @@ Slide 5 — How We Built It: the toolkit internals
 - @flow-inventory — parses a flow package → backlog, dependency DAG, complexity, target, catalog entry
 - @recipe-translator — recipe → commented code, one block per Wrangle step, original step quoted
 - @parity-auditor — runs output into staging and diffs it against live Dataprep output
-- /start (orient + pick one flow) and /migrate (run the golden path for one flow)
+- /dp:start (orient + pick one flow) and /dp:migrate (run the golden path for one flow)
 SPEAKER NOTES: Each agent runs in an isolated context window. The transform dictionary means the translator applies reviewed mappings rather than improvising, so 100 flows come out consistent.
 
 Slide 6 — Extraction: getting the logic out
@@ -110,7 +110,7 @@ SPEAKER NOTES: Docs are generated from the same metadata the code uses, so they 
 Slide 13 — Workflow Discipline: one flow at a time
 - One flow = one branch = one session = one commit — individually reviewable
 - The only bulk step is discovery (read-only inventory of all flows)
-- /start enforces it: shows progress, finishes in-progress work first, helps pick the next flow
+- /dp:start enforces it: shows progress, finishes in-progress work first, helps pick the next flow
 SPEAKER NOTES: This is deliberate. Bulk migration is how you get an unreviewable mess; sequential, verified, committed units keep risk and review load low.
 
 Slide 14 — Rollout Plan (table)

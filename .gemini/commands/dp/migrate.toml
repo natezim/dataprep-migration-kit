@@ -1,4 +1,4 @@
-description = "Migrate ONE Dataprep flow end-to-end: inventory → translate (SQL/Python) → compile & dry-run → parity audit → document → commit. Usage: /migrate context/<plan>/<flow>/"
+description = "Migrate ONE Dataprep flow end-to-end: inventory → translate (SQL/Python) → compile & dry-run → parity audit → document → commit. Usage: /dp:migrate context/<plan>/<flow>/"
 prompt = """
 --- MIGRATE ONE DATAPREP FLOW ---
 

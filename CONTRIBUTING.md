@@ -6,10 +6,10 @@ The golden rule: **one flow at a time, end to end.** No bulk runs. This is what 
 ## The loop (per flow)
 
 1. **`git pull`** — get the latest.
-2. **`/start`** in Gemini CLI — it shows progress and helps you pick the next flow (in
+2. **`/dp:start`** in Gemini CLI — it shows progress and helps you pick the next flow (in
    dependency order). Finish anything `In progress` before starting something new.
 3. **Branch** — `git checkout -b migrate/<plan>-<flow>` (one flow = one branch).
-4. **`/migrate context/<flow>`** — translate → compile/dry-run → parity-verify → document.
+4. **`/dp:migrate context/<flow>`** — translate → compile/dry-run → parity-verify → document.
 5. **Review the diff** — read what Gemini produced. The parity report must be green.
 6. **Commit** — `git commit` (one flow per commit). Update `docs/catalog.json` status.
 7. **Push / pull request (or merge request)** — when a GitHub or GitLab remote exists. Until
