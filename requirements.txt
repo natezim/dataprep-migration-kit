@@ -1,0 +1,11 @@
+# Python deps — only needed for the Python target and/or running parity from a script.
+# The SQL (Dataform) path and the BigQuery console need none of this.
+# Install:  pip install -r requirements.txt
+
+google-cloud-bigquery>=3.25      # query BigQuery from Python (no gcloud SDK required)
+pydata-google-auth>=1.8          # browser OAuth login (no service account needed)
+db-dtypes>=1.2                   # BigQuery <-> pandas type support for .to_dataframe()
+pandas>=2.0
+
+# Optional — only if you use BigQuery DataFrames for Python-target flows (large install):
+# bigframes>=1.0

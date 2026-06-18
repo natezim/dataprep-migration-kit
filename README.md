@@ -12,7 +12,8 @@ installed, its rules apply on top (additive). **Two ways to ship it** (same file
 a project folder now, or package it as a Gemini CLI **Extension** for one-command install when
 you hand it to lines of business — see [GUIDE.md](GUIDE.md) §7b.
 
-> **New here? Read [GUIDE.md](GUIDE.md).** It explains how everything works end to end.
+> **Setting up to use it today? → [SETUP.md](SETUP.md).** Prereqs, config, first run.
+> **Want to understand how it works? → [GUIDE.md](GUIDE.md).** End to end.
 
 ## Quickstart
 

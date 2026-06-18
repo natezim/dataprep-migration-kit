@@ -1,0 +1,12 @@
+# Dataform project config (Dataform Core). Fill in your values before `dataform compile`.
+# The repo root is the Dataform project root; SQL models live under definitions/<plan>/<flow>/.
+
+dataformCoreVersion: 3.0.0
+
+defaultProject: your-gcp-project-id        # <-- your GCP project id
+defaultDataset: dataprep_migration_staging # disposable staging dataset; parity runs land here
+defaultLocation: US                        # <-- your BigQuery region (US, EU, us-central1, ...)
+defaultAssertionDataset: dataprep_migration_staging  # parity assertions live alongside, in staging
+
+# Reminder: production datasets are READ-ONLY. The toolkit only writes to the staging dataset
+# above, which is created with a default table expiration and deleted at teardown.
