@@ -2,12 +2,13 @@
 .env
 *.token
 
-# Raw Dataprep exports (real business logic + large binaries) — keep local by default.
-# Remove these lines if you intentionally want to version exported recipes.
-context/*.zip
-context/flow_*/
+# Raw Dataprep exports (real business logic) — keep ALL of context/ out of git.
+# These are exported recipes; they don't belong in source control.
+/context/*
+!/context/.gitkeep
 
-# Work products
+# Work products — data exports and scratch only.
+# (output/parity/ and output/backlog.md ARE committed — they're the evidence trail.)
 output/data/
 output/temp/
 
