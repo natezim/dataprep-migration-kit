@@ -6,6 +6,8 @@ google-cloud-bigquery>=3.25      # query BigQuery from Python (no gcloud SDK req
 pydata-google-auth>=1.8          # browser OAuth login (no service account needed)
 db-dtypes>=1.2                   # BigQuery <-> pandas type support for .to_dataframe()
 pandas>=2.0
+openpyxl>=3.1                    # scripts/04 Excel catalog output (optional)
+# Discovery scripts 01-03 are stdlib-only (urllib) — no install needed.
 
 # Optional — only if you use BigQuery DataFrames for Python-target flows (large install):
 # bigframes>=1.0
