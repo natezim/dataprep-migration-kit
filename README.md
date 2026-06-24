@@ -14,6 +14,7 @@ you hand it to lines of business — see [GUIDE.md](GUIDE.md) §7b.
 
 > **Setting up to use it today? → [SETUP.md](SETUP.md).** Prereqs, config, first run.
 > **Want to understand how it works? → [GUIDE.md](GUIDE.md).** End to end.
+> **Keeping it improving (the hardening loop) → [MAINTAINING.md](MAINTAINING.md).** For the team and for Gemini.
 
 ## Quickstart
 
