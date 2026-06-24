@@ -26,16 +26,16 @@ This is the most important rule. The migration is sequential, not bulk.
 - Keep the workspace clean: scratch goes in `output/temp/`; nothing at the folder root; every
   new file has a home per File discipline below.
 
-## Targets — SQL or Python (decide per flow)
+## Targets — SQL-first (Python is a rare exception)
 
-- **Default: SQL** as a Dataform `.sqlx` in `definitions/<plan>/<flow>/`. Use for set-based work:
-  filters, joins, aggregations, pivots, dedupe, simple derivations.
-- **Python** (bigframes / pandas) in `python/`. First-class, not a fallback. Use when the
-  recipe has multi-step regex/parsing chains, row-wise/iterative logic, fuzzy matching,
-  ML/Vertex steps, or external lookups.
-- **Hybrid** allowed: SQL bulk + one Python step, stitched via the dependency graph.
-- When in doubt, prefer SQL for readability; escalate to Python only when SQL would be
-  unreadable or can't express the logic.
+- **BigQuery Standard SQL is the PRIMARY lane.** Every flow targets SQL (Dataform) unless SQL
+  literally cannot express the logic.
+- **Dual deliverable per flow (required):** (a) a Dataform model
+  `definitions/<plan>/<flow>/<flow>.sqlx` (`config { type: "operations", hasOutput: true, ... }`),
+  and (b) a standalone copy-paste `.sql` in `output/queries/<table>.sql` (config stripped,
+  run-instructions header) that runs as-is in the BigQuery console.
+- **Python is a RARE exception** (`python/<plan>/<flow>/`) — only when SQL can't express the logic
+  (heavy multi-step regex, row-wise/iterative logic, fuzzy match, ML/Vertex). Not first-class; justify it.
 
 ## Translation rules
 
@@ -46,17 +46,23 @@ This is the most important rule. The migration is sequential, not bulk.
   /v4/outputObjects/<id>/wrangleToPython` is **deprecated (R9.7)**, Enterprise-only, CSV-only,
   no multi-dataset, behind an experimental flag. Use it only if it's available and clearly
   helps; otherwise transpile. Either way, always reshape into our commented form.
-- **One output block per recipe step.** SQL → one CTE per step. Python → one commented block.
-- **Quote the original Wrangle** in a comment above each block. No un-commented logic.
-- Flow-to-flow dependencies become `ref()` (SQL) or an explicit read of the upstream table.
-- Preserve column order and names from the recipe output unless the recipe renames them.
+- **One CTE per legacy recipe node**, commented with its original recipe ID. **No `SELECT *` in
+  joins** — coalesce/cast/alias columns explicitly.
+- **Create-Execute-Clean lifecycle** for GCS-CSV sources (single self-contained script):
+  Phase 1 `CREATE OR REPLACE EXTERNAL TABLE EXT_*` on the GCS CSV (OPTIONS incl.
+  **`allow_quoted_newlines = true`**); Phase 2 `CREATE OR REPLACE TABLE STG_* AS <CTE graph>`;
+  Phase 3 `DROP EXTERNAL TABLE IF EXISTS` for every external at the bottom. BQ-native sources
+  skip the external phases and `ref()` directly. (See `references/dataform-conventions.md`.)
 - Never invent logic. If a step is ambiguous, flag it in the output and the report — do not guess.
-- **Defend against the three silent-corruption risks** (top parity-failure sources):
-  1. **Temporal** — Dataprep dates are timezone-naive strings; keep them tz-naive
-     (`TimestampNTZType` / naive datetime) to avoid date-shift.
+- **Defend against the five silent-corruption risks** (top parity-failure sources; see
+  `references/wrangle-to-python.md`):
+  1. **Temporal** — Dataprep dates are tz-naive strings; keep them tz-naive to avoid date-shift.
   2. **Decimal** — cap precision at 38 digits (Alteryx allows 50; BQ/Spark cap at 38) or cast to string.
-  3. **Null propagation** — `coalesce`/`fillna` before any string concat (Wrangle treats null ==
-     empty string; SQL-92 does not).
+  3. **Null propagation** — `coalesce`/`nullif`/`fillna` before any string concat or join.
+  4. **Date midnight** — `datetime_trunc(safe_cast(x as DATETIME), DAY)` to match Dataprep's
+     `yyyy-MM-dd` (BigQuery otherwise appends `00:00:00`).
+  5. **Trailing newlines** in quoted GCS fields — reproduce raw in strict parity; clean with
+     `trim(regexp_replace(col, '^"|"$', ''))` for promotion.
 
 ## Parity audit — exact match, non-negotiable
 
@@ -66,6 +72,10 @@ This is the most important rule. The migration is sequential, not bulk.
   row-hash** (compare row multisets) → (4) **cell-level** (the exact `(key, column)` coords).
 - Normalize legitimate diffs (e.g. tz-naive temporals, ordering); bar is **exact match** —
   any undocumented difference fails the flow.
+- **Two modes.** Audit in **Strict Parity** mode: reproduce the legacy output EXACTLY, *including
+  its bugs* (e.g. uncleaned keys with trailing newlines, failed joins) — join on raw keys so the
+  new table is bit-for-bit identical to legacy. **Clean Promotion** is a separate, documented
+  post-pass (fix the legacy bugs) done only AFTER strict parity passes; it is never audited against legacy.
 - New output is written only to the **disposable staging dataset** (see Safety); legacy tables
   are NEVER modified. New and legacy run side-by-side over a validation window before cutover.
 - Parity is target-agnostic — same check whether SQL or Python produced the table.
@@ -78,18 +88,30 @@ metadata — never pre-created or hand-named.
 | Type | Folder |
 |---|---|
 | Exported recipe input (read-only, gitignored) | `context/<plan>/<flow>/` |
-| SQL models (`.sqlx`) | `definitions/<plan>/<flow>/` |
-| Python flows (`.py`) | `python/<plan>/<flow>/` |
+| SQL Dataform model (`.sqlx`) | `definitions/<plan>/<flow>/` |
+| SQL console script (`.sql`, copy-paste) | `output/queries/<table>.sql` |
+| Python flows (`.py`, rare) | `python/<plan>/<flow>/` |
 | Parity evidence | `output/parity/<plan>/<flow>.md` |
 | Human Plan map | `plans/<plan>/README.md` |
 | Catalog dashboard | `docs/catalog.json` + `docs/catalog.html` |
 
 - `context/` is READ-ONLY. Copy out to work; never edit recipe inputs.
 - Never write migrated logic at the folder root. Scratch → `output/temp/`.
+- **Sanitize folder names: ≤60 chars, `[a-zA-Z0-9_.-]` only, no flow-ID suffixes** — Windows
+  `MAX_PATH` (260) truncates deep trees and silently fails extraction. See `references/windows-onedrive.md`.
 
 ## Safety & access
 
-- **Production is read-only.** SELECT-only against source/legacy tables — never DDL/DML.
+- **Dataprep is read-only — export only. The toolkit NEVER changes anything in Dataprep.**
+  Only reads are allowed: `GET /v4/flows`, `GET /v4/plans`, `GET /v4/flows/{id}/package`,
+  `GET /v4/jobGroups`. NEVER call any create/edit/delete/run endpoint (`replaceDataset`,
+  `POST /v4/outputObjects`, job triggers). Migration is one-directional: logic flows OUT of
+  Dataprep; nothing alters a flow, recipe, dataset, output, or schedule.
+- **Discovery query params (or the catalog silently truncates):** append `limit=250` to every
+  list call, and `flowsFilter=all` / `plansFilter=all` to see team-shared + ex-employee flows
+  (default scope is only the token owner's). Map plan runs via the embedded `latestPlanSnapshotRun`
+  on each plan — NOT `/v4/planSnapshotRuns`. See `references/dataprep-api.md`.
+- **Production (BigQuery) is read-only.** SELECT-only against source/legacy tables — never DDL/DML.
 - **All writes go to one disposable staging dataset, `dataprep_migration_staging`**, created
   with a default table expiration so it self-cleans, and deleted at teardown. A **write-guard
   refuses any write whose destination isn't that dataset.**

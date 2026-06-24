@@ -8,6 +8,21 @@ Target-agnostic: compares two BigQuery tables regardless of SQL vs Python origin
 Legacy/prod are **read-only (SELECT-only — never DDL/DML)**; the migrated table writes only to
 the disposable `dataprep_migration_staging`. Always dry-run + set a max-bytes guardrail first.
 
+## Two parity modes — audit in Strict, ship in Clean
+
+The harness has ONE job: prove **Strict Parity**. Clean Promotion is a separate, optional post-pass.
+
+- **Strict Parity Mode (validation — this is what these tiers audit):** reproduce the legacy
+  Dataprep output **EXACTLY, including its bugs**. If legacy left keys uncleaned (trailing `\n`,
+  embedded quotes) and that caused failed joins / duplicate rows, the new table must reproduce
+  those same failed joins and duplicates — **join on the raw, uncleaned keys**. Goal: bit-for-bit
+  identical to the legacy production table. This is the exact-match bar the tiers below compare.
+- **Clean Promotion Mode (release — optional, AFTER strict parity passes):** only once Strict
+  passes, you may produce a cleaned version for production (trim/clean keys to fix the legacy
+  bugs, e.g. `trim(regexp_replace(col, '^"|"$', '')) as col`). This is an **intentional deviation**
+  and must be documented as such — it deliberately will NOT match the legacy table. Never audit
+  Clean output against the legacy table with these tiers; it is expected to differ.
+
 ## Step 0 — FREEZE THE INPUT (do this first)
 
 Snapshot the source via **BigQuery time-travel** (`FOR SYSTEM_TIME AS OF <ts>`) or a one-off
@@ -81,8 +96,11 @@ where to_json_string(n) != to_json_string(l)
 limit 50;
 ```
 Map each differing column back to the recipe step that produces it — that's the step to fix.
-Most cell-level diffs trace to the three corruption risks (temporal drift, decimal >38, null
-propagation).
+Most cell-level diffs trace to the **five corruption risks** (see `wrangle-to-python.md`):
+temporal tz drift, decimal >38, null-propagation-before-concat, **date midnight precision
+(`datetime_trunc(safe_cast(x as DATETIME), DAY)`)**, and **trailing-newline / quoted keys**. The
+last two are the usual culprits in Strict mode: a `yyyy-MM-dd` legacy string vs a BQ DATETIME with
+`H:M:S`, or a key that matched in legacy but now joins differently because of an unescaped `\n`.
 
 ## As a Dataform assertion (preferred during the migration window)
 
@@ -101,6 +119,7 @@ select h from l except distinct select h from n;       -- ...or any legacy row m
 
 ## Verdict
 
-PASS only if Tiers 1–3 are clean (or every diff is documented + approved). On FAIL, Tier 4
-gives the coordinates; trace to the recipe step. Run new + legacy **side-by-side** over a
-validation window before cutover.
+PASS only if Tiers 1–3 are clean in **Strict Parity Mode** (or every diff is documented +
+approved). On FAIL, Tier 4 gives the coordinates; trace to the recipe step. Run new + legacy
+**side-by-side** over a validation window before cutover. Clean Promotion (if any) is verified
+separately as a documented deviation — never against the legacy table with these tiers.

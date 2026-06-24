@@ -19,8 +19,14 @@ bulk work. Discovery (read-only inventory) is the ONLY bulk-allowed step. Keep i
          with a default table expiration so it self-cleans).
        * Is git initialized? If not, suggest `git init`.
    - Detect the export path (API-OPTIONAL — everything downstream is identical either way):
-       * IF Dataprep API creds exist in .env → offer the fast path: auto-sweep `GET /v4/flows` to
-         list, then bulk-export each `GET /v4/flows/{id}/package` ZIP into context/<plan>/<flow>/.
+       * IF Dataprep API creds exist in .env → offer the fast path (Dataprep is READ-ONLY — GET
+         only, never write/run/delete): auto-sweep `GET /v4/flows?limit=250&flowsFilter=all` to
+         list (the `limit` defeats a silent 25-item cap; `flowsFilter=all` includes team-shared and
+         ex-employee flows), then bulk-export each `GET /v4/flows/{id}/package` ZIP into
+         context/<plan>/<flow>/. Extracted folder names are sanitized to ≤60 chars, no flow-ID
+         suffix (Windows MAX_PATH). For plan run-state, read the embedded `latestPlanSnapshotRun`
+         from `GET /v4/plans?limit=250&plansFilter=all` — NOT `/v4/planSnapshotRuns` (transient
+         IDs, 403s, false "Never Run").
        * IF NO API creds (business unit may have none) → guide the manual path: UI "Export Flow"
          (yields the IDENTICAL ZIP) into context/, OR paste a flow list (names/ids) to seed the
          catalog now and export packages just-in-time per flow.

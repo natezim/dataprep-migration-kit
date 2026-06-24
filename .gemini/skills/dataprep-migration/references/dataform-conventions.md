@@ -9,11 +9,22 @@ next. A flow's SQL assets live together:
 
 ```
 dataform/definitions/
-  <plan>/<flow>/        <flow>.sqlx          the translated recipe (one CTE per step)
+  <plan>/<flow>/        <flow>.sqlx          the translated recipe (one CTE per recipe node)
+                        <flow>.sql           standalone copy-paste console script (config stripped)
                         <flow>_parity.sqlx   the parity reconciliation assertion (deleted at cutover)
                         README.md            what the flow does + parity status
   sources/              declarations: raw source tables AND legacy Dataprep output tables (parity)
 ```
+
+## Dual deliverable per flow (REQUIRED)
+
+Every migrated flow produces **two artifacts** from the same SQL:
+
+1. **Dataform model** `definitions/<plan>/<flow>/<flow>.sqlx` — carries the `config { ... }` block
+   for repo compilation and orchestration.
+2. **Standalone console script** — the same SQL with the **config block stripped** and a
+   run-instructions header, saved to the flow folder as `<flow>.sql` and copied to
+   `output/queries/<table>.sql`. Must run **as-is** in the BigQuery console with zero edits.
 
 (Python lane mirrors this under `python/<plan>/<flow>/`; recipe input is read-only and gitignored
 under `context/<plan>/<flow>/`. See SKILL.md for the full org map.)
@@ -32,8 +43,29 @@ at teardown**.
 
 - **WRITE-GUARD:** every write must target `dataprep_migration_staging`. Refuse any write aimed
   at another dataset. Production/legacy are **read-only (SELECT-only)** — never DDL/DML there.
+- **EXT_/STG_ naming:** GCS external tables are prefixed `EXT_`, staging output tables `STG_`.
+- **External-table drop hygiene:** any `EXT_` table created to mount a GCS CSV must be dropped
+  (`DROP EXTERNAL TABLE IF EXISTS`) at the very bottom of the same script — leave the schema
+  pristine (the "Create-Execute-Clean" lifecycle; see `wrangle-to-sql.md`).
 
 ## `.sqlx` config pattern
+
+For the unified Create-Execute-Clean pipeline (DDL mount + DML transform + DDL drop in one
+script), use `type: "operations"` with `hasOutput: true`:
+
+```sql
+config {
+  type: "operations",                         -- single sequential DDL/DML/DDL script
+  hasOutput: true,                            -- Dataform treats STG_ output as a buildable table
+  database: "my-gcp-project",
+  schema: "dataprep_migration_staging",       -- disposable staging dataset (write-guarded)
+  name: "STG_RETAIL_CUST_CLEAN",              -- unique, plan-aware, STG_-prefixed
+  tags: ["plan:retail_nightly", "lob:retail"]
+}
+```
+
+For a pure set-based model (no GCS mounting — all sources are BigQuery tables), a plain
+`type: "table"` model with inline assertions is fine:
 
 ```sql
 config {

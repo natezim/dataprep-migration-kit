@@ -32,18 +32,16 @@ That's what makes output consistent. Gemini isn't inventing SQL per flow — it'
 a reviewed mapping from the **transform dictionary**. One hundred flows come out looking
 like they were written by the same careful person.
 
-## 3. Two targets: SQL or Python
+## 3. SQL-first (Python is a rare exception)
 
-Every flow lands in one of two targets, chosen by complexity. **Python is first-class,
-not a fallback.**
+**BigQuery Standard SQL is the primary lane.** Every flow targets SQL unless SQL literally
+cannot express the logic. Each flow produces a **dual deliverable**: a Dataform `.sqlx`
+(`type: "operations"`) for the repo *and* a standalone copy-paste `.sql` for the BigQuery console.
 
 | Choose… | When the recipe is… | Runtime |
 |---|---|---|
-| **SQL** (Dataform `.sqlx`) — default | Set-based: filters, joins, aggregations, pivots, dedupe, simple derivations | BigQuery, orchestrated by Dataform |
-| **Python** (bigframes / pandas) | Multi-step regex/parsing chains, row-wise or iterative logic, fuzzy matching, ML / Vertex AI steps, external lookups/API enrichment | bigframes (pushes down to BigQuery) or pandas; scheduled via Cloud Run / Composer / Vertex |
-
-A flow can be **hybrid**: SQL for the bulk, one Python step for the hard part, stitched
-together in the dependency graph.
+| **SQL** (Dataform `.sqlx` + `.sql`) — default | Almost everything: filters, joins, aggregations, pivots, dedupe, derivations, window logic | BigQuery, orchestrated by Dataform |
+| **Python** (rare exception) | Only when SQL can't express it: heavy multi-step regex, row-wise/iterative logic, fuzzy match, ML/Vertex | bigframes / pandas; scheduled via Composer |
 
 **The decision rule lives in two places** and is applied automatically:
 `GEMINI.md` (package root) and `.gemini/skills/dataprep-migration/SKILL.md`.
@@ -110,7 +108,7 @@ experimental flag — so it's used only where it's available and clearly helps, 
 baseline. **Either way the translator reshapes** into **one CTE per step (SQL)** or **one
 commented block per step (Python)**, original Wrangle quoted, flow deps as `ref()` — because
 native output is machine-spew and our value is making it readable and correct. It proactively
-applies the three corruption fixes (below).
+applies the five corruption fixes (below).
 
 ### Step 3 — Compile & dry-run
 `dataform compile` catches structural errors; a BigQuery dry-run estimates bytes/cost and
@@ -128,9 +126,10 @@ identical data, otherwise live-source drift looks like a translation bug — the
 3. **MD5 row-hash** — hash every row, compare the multisets (efficient deep check at scale)
 4. **Cell-level scan** — on any hash mismatch, the exact `(key, column)` coordinates that differ
 
-Legitimate diffs (tz-naive temporals, ordering) are normalized first. Bar is **exact match** —
-any undocumented difference fails the flow. Most cell-level diffs trace to the three corruption
-risks below.
+Legitimate diffs (tz-naive temporals, ordering) are normalized first. Bar is **exact match** in
+**Strict Parity** mode — the new table must reproduce legacy *exactly, including its bugs* (e.g.
+uncleaned keys); a cleaned "Clean Promotion" version is a separate, documented post-pass. Most
+cell-level diffs trace to the five corruption risks below.
 
 ### Step 5 — Report
 A parity report lands in `output/`. On failure it points at the recipe step whose
@@ -142,18 +141,21 @@ audit-logged. New and legacy run **side-by-side over a validation window** befor
 During the migration window each flow keeps a temporary reconciliation assertion; once legacy
 is retired, the assertion is deleted.
 
-### The three corruption fixes (why migrated output silently disagrees)
-Dataprep's engine and standard Python/SQL runtimes differ in three ways that quietly corrupt
-data. The translator handles all three up front; they're also the first thing to check on a
+### The five corruption fixes (why migrated output silently disagrees)
+Dataprep's engine and standard SQL/Python runtimes differ in five ways that quietly corrupt
+data. The translator handles all five up front; they're also the first thing to check on a
 parity mismatch:
 
 - **Temporal string drift** — Dataprep parses dates as timezone-naive strings. Moving them to
-  a TZ-aware system shifts dates. Keep them tz-naive (`TimestampNTZType` in Spark / naive
-  datetime in pandas).
+  a TZ-aware system shifts dates. Keep them tz-naive (`TimestampNTZType` / naive datetime).
 - **Decimal precision truncation** — Alteryx `FixedDecimal` allows up to 50 digits; BigQuery
   and Spark cap at **38**. Scale to ≤38 or cast to string, or you get runtime errors / silent loss.
 - **Null propagation** — Wrangle treats null == empty string; SQL-92 does not, so `concat(x,
-  NULL)` → NULL and rows vanish / aggregates skew. `coalesce`/`fillna` before every string concat.
+  NULL)` → NULL and rows vanish / aggregates skew. `coalesce`/`nullif`/`fillna` before concat/join.
+- **Date midnight** — legacy formats dates `yyyy-MM-dd`; BigQuery `DATETIME` appends `00:00:00`,
+  so a direct cast of a timestamp mismatches. Wrap in `datetime_trunc(safe_cast(x as DATETIME), DAY)`.
+- **Trailing newlines** in quoted GCS fields — unescaped `\n` is read literally and breaks joins.
+  Strict parity: join the raw value (reproduce legacy). Clean: `trim(regexp_replace(col, '^"|"$', ''))`.
 
 ## 6. What the output looks like
 

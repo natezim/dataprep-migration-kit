@@ -34,8 +34,10 @@ read-only discovery is bulk.
 
 ## What you get per flow
 
-- **SQL flows** → a commented Dataform `.sqlx` in `definitions/<plan>/<flow>/` (one CTE per recipe step)
-- **Python flows** → a commented script in `python/<plan>/<flow>/` (bigframes / pandas / PySpark)
+**SQL-first** (Python only when SQL can't express the logic). Each flow produces a **dual deliverable**:
+
+- A commented Dataform model `definitions/<plan>/<flow>/<flow>.sqlx` (`type: "operations"`) — one CTE per recipe node
+- A standalone copy-paste `output/queries/<table>.sql` that runs as-is in the BigQuery console
 - **A parity report** in `output/parity/<plan>/<flow>.md` proving the new table matches the legacy Dataprep table
 
 Folders mirror the Dataprep **Plan → flow** hierarchy and are created by Gemini one at a time
@@ -47,8 +49,9 @@ Composer DAG), preserving run order and schedule.
 | Path | What |
 |---|---|
 | `context/<plan>/<flow>/` | Exported recipe input (read-only, gitignored) |
-| `definitions/<plan>/<flow>/` | SQL (Dataform `.sqlx`) outputs |
-| `python/<plan>/<flow>/` | Python-target flows |
+| `definitions/<plan>/<flow>/` | SQL Dataform models (`.sqlx`) |
+| `output/queries/<table>.sql` | Copy-paste console SQL (dual deliverable) |
+| `python/<plan>/<flow>/` | Python flows (rare exception) |
 | `output/parity/<plan>/<flow>.md` | Parity evidence; `output/` also holds backlog + logs |
 | `plans/<plan>/README.md` | Human-readable Plan map |
 | `docs/catalog.json` + `docs/catalog.html` | Generated dashboard (host on Pages) |

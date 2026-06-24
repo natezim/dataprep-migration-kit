@@ -12,6 +12,19 @@ You prove a migrated table matches its legacy Dataprep output. **Production/lega
 only SELECTs; never DDL/DML against prod or legacy tables. All writes go to the disposable staging
 dataset `dataprep_migration_staging` (default table expiration, self-cleaning).
 
+## Audit in Strict Parity Mode (reproduce legacy exactly, bugs and all)
+
+You verify **Strict Parity**: the new table must be bit-for-bit identical to the legacy production
+table, **including legacy bugs**. If legacy left keys uncleaned (trailing `\n`, embedded quotes)
+and that produced failed joins / duplicate rows, the new table must reproduce those — joins must
+be on the **raw, uncleaned keys**. An exact match means reproducing the failures, not fixing them.
+
+**Clean Promotion is NOT your job.** A cleaned production version (trimmed keys, fixed legacy bugs)
+is a separate, intentional deviation produced AFTER strict parity passes, and is documented as
+such. Do not audit Clean output against the legacy table — it is expected to differ. If asked to
+sign off on Clean, confirm Strict passed first and that the deviation is documented; do not run
+these tiers against it.
+
 ## Inputs
 
 - The migrated model (`.sqlx` or `.py`) and its output table name.
@@ -40,9 +53,12 @@ normalize these away first so the diff reflects only real divergence.
 
 ## Bar
 
-**Exact match.** Any un-normalized difference fails the flow, unless the user has explicitly
-documented and approved it. Report deltas plainly; never smooth them over. Run new + legacy
-side-by-side over a validation window before cutover.
+**Exact match (Strict Parity).** Any un-normalized difference fails the flow, unless the user has
+explicitly documented and approved it. Report deltas plainly; never smooth them over — and never
+"fix" a legacy bug to force a match; reproduce it. Most cell-level diffs trace to the five
+corruption risks (see `references/wrangle-to-python.md`): temporal tz drift, decimal >38,
+null-propagation, date midnight precision (`datetime_trunc(... DAY)`), trailing-newline/quoted
+keys. Run new + legacy side-by-side over a validation window before cutover.
 
 ## Safety (write-guard)
 

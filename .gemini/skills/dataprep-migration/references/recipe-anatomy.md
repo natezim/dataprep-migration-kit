@@ -6,11 +6,23 @@ How Dataprep exports a flow, so `@flow-inventory` and `@recipe-translator` can p
 
 Two routes produce the **identical ZIP** of JSON descriptors; everything downstream is the same:
 - **API (fast path):** `GET /v4/flows/{id}/package` (auth: API access token in the Authorization
-  header). Catalog can be seeded from an API sweep of `GET /v4/flows`. Best for repeatability
-  across ~100 flows.
+  header). Catalog can be seeded from an API sweep of `GET /v4/flows?limit=250&flowsFilter=all`.
+  Best for repeatability across ~100 flows. **Dataprep is READ-ONLY here — GET only.**
 - **UI (no API needed):** Flow menu → **"Export Flow"** downloads the same ZIP. Some LOBs have no
   API access — this route is fully supported, and the catalog can instead be seeded from a pasted
   flow list.
+
+**Required list-query params (or the catalog silently truncates) — full details in
+`dataprep-api.md`:**
+- `limit=250` on every list endpoint — the default is a silent **25-item cap**, no error raised.
+- `flowsFilter=all` / `plansFilter=all` — default returns only token-owner's resources; `all`
+  surfaces team-shared and ex-employee flows/plans.
+- Plan run-state: read the embedded **`latestPlanSnapshotRun`** dict from
+  `GET /v4/plans?limit=250&plansFilter=all` — NOT `/v4/planSnapshotRuns` (transient IDs / 403s /
+  false "Never Run").
+- Job stats: bulk-paginate `GET /v4/jobGroups?limit=250&embed=creator` (~100/page, up to ~3000)
+  and aggregate in memory — nested filters (e.g. `wrangledDataset.flow.id`) 500 server-side.
+- Windows: sanitize extracted folder names to ≤60 chars, drop flow-ID suffixes (MAX_PATH 260).
 
 ## Flow package directory schema
 

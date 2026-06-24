@@ -68,7 +68,7 @@ Slide 7 — Translation: transpile-first, native as a rare accelerator
 - Primary engine: our transform dictionary maps each Wrangle step to SQL/Python; pushdown SQL reused for BigQuery-source flows
 - Dataprep's own code-gen (POST /v4/outputObjects/<id>/wrangleToPython) is deprecated (R9.7), Enterprise-only, CSV-only, no multi-dataset — used only when it cleanly applies
 - Output: one CTE (SQL) or one block (Python) per recipe step, with the original Wrangle quoted
-- Three corruption fixes applied up front: timezone-naive temporals, decimal ≤38 digits, coalesce-before-concat
+- Five corruption fixes up front: tz-naive temporals, decimal cap 38, null coalesce, date-midnight truncation, trailing-newline handling
 SPEAKER NOTES: We tested the native path and it's too limited and deprecated to depend on. The dictionary-based transpiler is the engine; native gen is an occasional shortcut.
 
 Slide 8 — SQL vs Python (table)

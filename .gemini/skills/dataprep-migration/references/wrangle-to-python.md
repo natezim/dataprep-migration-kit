@@ -49,7 +49,7 @@ the commented, one-block-per-step form above. Most flows hit a limit below and f
 
 → When any limit applies (the common case), use **Path B**.
 
-## Three silent-corruption risks — ALWAYS defend against these
+## Five silent-corruption risks — ALWAYS defend against these
 
 These are the top sources of value-level parity failures. Bake the fix into the translation.
 
@@ -59,9 +59,20 @@ These are the top sources of value-level parity failures. Bake the fix into the 
 2. **Decimal precision truncation.** Alteryx `FixedDecimal` allows up to 50 digits; Spark/BQ
    cap at **38**. Scale high-precision columns to ≤38 digits or cast to string — else runtime
    error or silent precision loss.
-3. **Null propagation.** Wrangle treats null == empty string; Python/Spark follow SQL-92
-   (concat with null → null → wiped rows / skewed aggregates). Wrap concatenations in
+3. **Null propagation before concat.** Wrangle treats null == empty string; Python/Spark follow
+   SQL-92 (concat with null → null → wiped rows / skewed aggregates). Wrap concatenations in
    `coalesce(col, lit(''))` / `fillna('')` before joining strings.
+4. **Date midnight normalization.** Legacy Dataprep formats dates as `yyyy-MM-dd` strings; loaded
+   into a DATETIME, BigQuery appends `00:00:00`. A direct `safe_cast` of a timestamp that still
+   carries H:M:S then mismatches cell-by-cell. Truncate to date-only midnight precision:
+   `datetime_trunc(safe_cast(x as DATETIME), DAY)` (SQL) / `pd.to_datetime(s).dt.normalize()`
+   (pandas) / `date_trunc('day', col)` (Spark).
+5. **Trailing-newline in quoted GCS fields.** An unescaped `\n` inside a quoted CSV field is read
+   literally (`TCVA-A9A2...\n`); if legacy didn't clean it, joins on that key fail. **Strict
+   Parity:** join on the raw key to reproduce the legacy failed-join / duplicate rows. **Clean
+   Promotion (post-pass only):** strip it — `trim(regexp_replace(col, '^"|"$', '')) as col`
+   (SQL) / `df['col'].str.strip().str.strip('"')` (pandas). On the external table also set
+   `allow_quoted_newlines = true` so rows aren't truncated mid-field.
 
 ## Gotchas (carry into parity)
 - bigframes/pandas dtypes vs legacy BigQuery types — confirm in the schema tier.

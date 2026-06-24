@@ -1,6 +1,6 @@
 # Python lane — when and how
 
-For flows whose logic is unreadable or inexpressible as SQL. Python is a first-class target,
+For flows whose logic is unreadable or inexpressible as SQL. Python is a rare exception (SQL-first),
 not a fallback — but default to SQL and escalate deliberately.
 
 ## Choose Python when the recipe has
