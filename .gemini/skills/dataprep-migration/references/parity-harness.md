@@ -4,6 +4,12 @@ Prove a migrated table matches its legacy Dataprep output. Run tiers in order; s
 once a tier passes cleanly, escalate to the next when it doesn't. **Exact-match bar.**
 Target-agnostic: compares two BigQuery tables regardless of SQL vs Python origin.
 
+**Deliverables per flow** (both in `flows/<plan>/<flow>/`):
+- `validation.sql` — the runnable tiers below as one self-contained script the **user runs** to
+  compare new vs legacy in the BigQuery console. No hard-coded values: `DECLARE` the table names /
+  frozen-snapshot timestamp at the top.
+- `parity.md` — the written verdict (strict/clean, tier results, any documented deviations).
+
 `<new>` = `dataprep_migration_staging.<table>`. `<legacy>` = the Dataprep output table.
 Legacy/prod are **read-only (SELECT-only — never DDL/DML)**; the migrated table writes only to
 the disposable `dataprep_migration_staging`. Always dry-run + set a max-bytes guardrail first.
@@ -102,12 +108,14 @@ temporal tz drift, decimal >38, null-propagation-before-concat, **date midnight 
 last two are the usual culprits in Strict mode: a `yyyy-MM-dd` legacy string vs a BQ DATETIME with
 `H:M:S`, or a key that matched in legacy but now joins differently because of an unescaped `\n`.
 
-## As a Dataform assertion (preferred during the migration window)
+## Optional — as a Dataform assertion (only if the flow runs in Dataform)
 
-Wrap Tier 3 as an assertion so it runs in the graph and fails the build on any diff:
+If you added the optional `.sqlx` wrapper for scheduled orchestration, you can also wrap Tier 3 as
+an assertion so it runs in the graph and fails the build on any diff. The runnable `validation.sql`
+is the primary artifact; this is an extra for the Dataform path.
 
 ```sql
--- definitions/<plan>/cust_clean/cust_clean_parity.sqlx
+-- flows/<plan>/cust_clean/cust_clean_parity.sqlx
 config { type: "assertion", tags: ["parity", "plan:retail_nightly", "lob:retail"] }
 with n as (select to_hex(md5(to_json_string(t))) h from ${ref("cust_clean")} t),
      l as (select to_hex(md5(to_json_string(t))) h from ${ref("legacy_cust_clean")} t)

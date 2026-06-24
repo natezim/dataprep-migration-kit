@@ -1,6 +1,7 @@
 # Recipe anatomy — reading exported Dataprep flow packages
 
-How Dataprep exports a flow, so `@flow-inventory` and `@recipe-translator` can parse it.
+How Dataprep exports a flow, so `@flow-inventory` and `@recipe-translator` can parse it. The
+exported package lands read-only (gitignored) under `flows/<plan>/<flow>/recipe/`.
 
 ## Getting the package — API-optional
 
@@ -23,6 +24,7 @@ Two routes produce the **identical ZIP** of JSON descriptors; everything downstr
 - Job stats: bulk-paginate `GET /v4/jobGroups?limit=250&embed=creator` (~100/page, up to ~3000)
   and aggregate in memory — nested filters (e.g. `wrangledDataset.flow.id`) 500 server-side.
 - Windows: sanitize extracted folder names to ≤60 chars, drop flow-ID suffixes (MAX_PATH 260).
+  Extract into `flows/<plan>/<flow>/recipe/`.
 
 ## Flow package directory schema
 
@@ -65,4 +67,4 @@ The flow is a Directed Acyclic Graph. **Flow nodes** = unique immutable IDs for 
 
 - [ ] Confirm exact JSON keys inside `recipes/*.json` for step type + params (versions vary).
 - [ ] Note how multi-output flows and parameterized datasets are represented.
-- [ ] Capture a real `flow.json` sample into `context/` as the reference fixture.
+- [ ] Capture a real `flow.json` sample into a flow's `recipe/` as the reference fixture.

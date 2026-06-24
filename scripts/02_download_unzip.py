@@ -1,7 +1,7 @@
 """02 — Download each flow's package and extract it (READ-ONLY export).
 
 For every swept flow, GET /v4/flows/{id}/package (the same ZIP the UI "Export Flow" produces)
-and extract it to context/<plan>/<flow>/ with Windows-safe folder names. Run 01 first.
+and extract it to flows/<plan>/<flow>/recipe/ with Windows-safe folder names. Run 01 first.
 
 NOTE: this only READS from Dataprep. It never modifies a flow, recipe, or output.
 """
@@ -30,19 +30,20 @@ def main():
     ok = fail = 0
     for fl in flows:
         fid = fl.get("id")
-        plan = pmap.get(fid, "_unplanned")
-        flow_dir = ROOT / "context" / plan / sanitize_name(fl.get("name", f"flow_{fid}"))
+        plan = sanitize_name(pmap.get(fid, "_unplanned"))
+        # one folder per flow: flows/<plan>/<flow>/recipe/  (the read-only recipe input)
+        flow_dir = ROOT / "flows" / plan / sanitize_name(fl.get("name", f"flow_{fid}")) / "recipe"
         flow_dir.mkdir(parents=True, exist_ok=True)
         try:
             data = download_bytes(f"v4/flows/{fid}/package")
             with zipfile.ZipFile(io.BytesIO(data)) as z:
                 z.extractall(flow_dir)
             ok += 1
-            print(f"  ok   {plan}/{flow_dir.name}")
+            print(f"  ok   flows/{plan}/{flow_dir.parent.name}/recipe")
         except Exception as e:  # keep going; one bad flow shouldn't halt the sweep
             fail += 1
             print(f"  FAIL flow {fid}: {e}")
-    print(f"Extracted {ok} flows to context/ ({fail} failed)")
+    print(f"Extracted {ok} flows to flows/<plan>/<flow>/recipe/ ({fail} failed)")
     # If extraction fails with FileNotFoundError on deep names, shorten sanitize_name maxlen.
 
 

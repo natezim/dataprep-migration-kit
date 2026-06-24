@@ -2,13 +2,10 @@
 .env
 *.token
 
-# Raw Dataprep exports (real business logic) — keep ALL of context/ out of git.
-# These are exported recipes; they don't belong in source control.
-/context/*
-!/context/.gitkeep
+# Raw Dataprep exports (real business logic) — the per-flow recipe/ inputs stay out of git.
+flows/**/recipe/
 
-# Work products — data exports and scratch only.
-# (output/parity/ and output/backlog.md ARE committed — they're the evidence trail.)
+# Scratch + intermediate script output. (status/ and each flow's .sql/EXPLANATION/parity ARE committed.)
 output/data/
 output/temp/
 

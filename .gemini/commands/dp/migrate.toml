@@ -1,71 +1,94 @@
-description = "Migrate ONE Dataprep flow end-to-end: inventory → translate (SQL/Python) → compile & dry-run → parity audit → document → commit. Usage: /dp:migrate context/<plan>/<flow>/"
+description = "Migrate ONE Dataprep flow end-to-end: inventory → translate (standalone SQL) → compile & dry-run → parity audit → document → commit. Usage: /dp:migrate flows/<plan>/<flow>/"
 prompt = """
 --- MIGRATE ONE DATAPREP FLOW ---
 
-Input: a path to an exported Dataprep flow package under `context/<plan>/<flow>/` (argument).
-If no argument was given, ask which flow in ./context/ to migrate, then stop and wait.
+Input: a path to a flow folder under `flows/<plan>/<flow>/` (argument). The recipe input lives in
+`flows/<plan>/<flow>/recipe/` (read-only, gitignored). If no argument was given, ask which flow in
+./flows/ to migrate, then stop and wait.
 
 ONE FLOW AT A TIME. Bulk migration is REFUSED. One flow = one branch (migrate/<plan>-<flow>)
 = one session = one commit. Finish in-progress flows first.
 
+ONE FOLDER PER FLOW: everything a flow produces lives in `flows/<plan>/<flow>/`. The five
+deliverables (all in that folder):
+  - <flow>.sql        — PRIMARY: ONE self-contained, console-runnable BigQuery SQL.
+  - validation.sql    — a query the USER runs to compare new vs legacy and SEE the result.
+  - EXPLANATION.md    — plain-English: what / why / how to maintain / parity result.
+  - parity.md         — the audit evidence.
+  - <flow>.sqlx       — OPTIONAL Dataform wrapper, only if scheduled orchestration is wanted.
+
 Run the golden path. Keep the user informed at each step; stop on any hard gate.
 
 0. SET UP THE FLOW FOLDER + BRANCH
-   From the catalog metadata (canonical plan + flow names — never hand-named), CREATE the
-   per-flow folder one at a time:
-     - SQL (default) → definitions/<plan>/<flow>/  (<flow>.sqlx, <flow>.sql, <flow>_parity.sqlx, README.md)
-     - Python (rare) → python/<plan>/<flow>/        (<flow>.py, parity.py, README.md)
-   Confirm git tree is clean, then create/switch to branch `migrate/<plan>-<flow>`.
+   From the catalog metadata (canonical plan + flow names — never hand-named), confirm the per-flow
+   folder `flows/<plan>/<flow>/` (with its `recipe/` input). Confirm git tree is clean, then
+   create/switch to branch `migrate/<plan>-<flow>`.
 
 1. INVENTORY
-   Invoke @flow-inventory on the package. Capture: sources, output table(s), ordered steps,
-   inter-flow dependencies, complexity, native-gen eligibility, and the recommended TARGET
-   (SQL via Dataform / Python / Hybrid). Show a one-screen summary. Surface any UNKNOWN/ambiguous
+   Invoke @flow-inventory on the package in `recipe/`. Capture: sources, output table(s), ordered
+   steps, inter-flow dependencies, complexity, native-gen eligibility, and the recommended TARGET
+   (standalone SQL / Python / Hybrid). Show a one-screen summary. Surface any UNKNOWN/ambiguous
    steps now. If this flow depends on an un-migrated upstream flow, stop — migrate upstream first.
 
-2. TRANSLATE (SQL-first; dual deliverable; transpile-first; native-gen optional)
-   Invoke @recipe-translator with the inventory. BigQuery Standard SQL via Dataform is the PRIMARY
-   default lane; Python is a RARE exception (only when SQL functionally cannot express the logic).
-   It TRANSPILES from raw Wrangle via the transform dictionary (reusing pushdown SQL for BQ-source
-   flows), and only uses Dataprep's own code-gen (POST /v4/outputObjects/<id>/wrangleToPython —
-   DEPRECATED, Enterprise-only, CSV-only, no multi-dataset) when the inventory marks it eligible
-   and it applies cleanly. It builds the self-contained Create-Execute-Clean script:
+2. TRANSLATE (SQL-first; transpile-first; native-gen optional)
+   Invoke @recipe-translator with the inventory. A standalone, console-runnable BigQuery Standard
+   SQL file is the PRIMARY default lane; Python is a RARE exception (only when SQL functionally
+   cannot express the logic). It TRANSPILES from raw Wrangle via the transform dictionary (reusing
+   pushdown SQL for BQ-source flows), and only uses Dataprep's own code-gen (POST
+   /v4/outputObjects/<id>/wrangleToPython — DEPRECATED, Enterprise-only, CSV-only, no multi-dataset)
+   when the inventory marks it eligible and it applies cleanly. It builds the self-contained
+   Create-Execute-Clean script in `flows/<plan>/<flow>/<flow>.sql`:
      - PHASE 1 CREATE — CREATE OR REPLACE EXTERNAL TABLE per GCS CSV (EXT_ prefix; OPTIONS include
-       allow_quoted_newlines = true). For BigQuery-table sources, skip this and ref() directly.
+       allow_quoted_newlines = true). For BigQuery-table sources, skip this and reference directly.
      - PHASE 2 EXECUTE — CREATE OR REPLACE TABLE AS a CTE graph (one CTE per legacy recipe node,
        commented with its legacy recipe ID; never SELECT * in joins; STG_ prefix), applying the
-       five corruption fixes (tz-naive temporal, decimal cap 38, null coalesce, date-midnight truncation, trailing-newline).
+       five corruption fixes (tz-naive temporal, decimal cap 38, null coalesce, date-midnight
+       truncation, trailing-newline).
      - PHASE 3 CLEAN — DROP EXTERNAL TABLE IF EXISTS for every external table at the bottom.
-   It emits BOTH artifacts: the Dataform operations model (config { type:"operations",
-   hasOutput:true, ... }) at definitions/<plan>/<flow>/<flow>.sqlx, AND a standalone copy-paste
-   .sql console script (config stripped, run-instructions header) at <flow>.sql + output/queries/.
-   All writes target dataprep_migration_staging. Report any steps flagged `-- TODO: verify` — these
-   are dictionary gaps.
+   HARD OUTPUT RULES the translator must follow:
+     - NO HARD-CODED VALUES — load/run dates and environment-specific values go to CURRENT_DATE(),
+       DECLARE vars at the top, query parameters, or Dataform vars. Critical for automation.
+     - HEAVY COMMENTING — a header block (what / why / when / source / owner / parity result) plus
+       an inline comment on EVERY CTE (what + why). Readable, feed-back-able to Gemini,
+       troubleshootable.
+   It also emits `validation.sql` (user-runnable new-vs-legacy check) and `EXPLANATION.md`
+   (plain-English maintenance doc). The Dataform `<flow>.sqlx` wrapper is OPTIONAL — produce it
+   only if the user wants scheduled orchestration. All writes target dataprep_migration_staging.
+   Report any steps flagged `-- TODO: verify` — these are dictionary gaps.
 
 3. COMPILE & DRY-RUN
-   SQL: run `dataform compile` (model names must be unique / plan-aware); then a BigQuery dry-run
-   for syntax + estimated bytes. Python: lint/parse-check; dry-run the read if cheap.
-   No gcloud required — use the google-cloud-bigquery client (browser OAuth) or the console/Dataform UI.
-   If estimated scan is large, warn and wait before any real run.
+   Run a BigQuery dry-run of `<flow>.sql` for syntax + estimated bytes. If a .sqlx wrapper was
+   produced, also `dataform compile` (model names must be unique / plan-aware). Python: lint/parse-
+   check; dry-run the read if cheap. No gcloud required — use the google-cloud-bigquery client
+   (browser OAuth) or the console/Dataform UI. If estimated scan is large, warn and wait.
 
 4. PARITY AUDIT
    Confirm the natural/primary key with the user if not obvious. Invoke @parity-auditor:
    it FREEZES the source via BigQuery time-travel/snapshot, runs the migrated model into the
    staging dataset `dataprep_migration_staging` (legacy/prod is READ-ONLY; WRITE-GUARD refuses any
    non-staging target), normalizes known-legitimate diffs, then runs the 4-tier diff
-   (schema → row count → MD5 row-hash → cell-level). Bar is EXACT match. Run side-by-side over a
-   validation window before any cutover.
+   (schema → row count → MD5 row-hash → cell-level). Bar is EXACT match (Strict Parity). It writes
+   `flows/<plan>/<flow>/parity.md` (evidence) and the user-runnable `validation.sql`. Run
+   side-by-side over a validation window before any cutover.
 
 5. DOCUMENT & REPORT
-   Show the parity verdict (PASS/FAIL); full report at ./output/parity/<plan>/<flow>.md. Write the
-   per-flow README.md (what it does, target, run order, parity link) and update docs/catalog.json
-   status. On FAIL, point at the diverging recipe step(s); do NOT promote.
+   Show the parity verdict (PASS/FAIL); full evidence at `flows/<plan>/<flow>/parity.md`. Ensure
+   `EXPLANATION.md` is complete (what it does, how to maintain, run order, parity result). On FAIL,
+   point at the diverging recipe step(s); do NOT promote.
 
-6. COMMIT (only on PASS, with explicit user yes)
+6. STATUS CHANGE IS GATED — STOP AND ASK
+   The live tracker is `status/migration_status.csv` (source of truth; `status/migration_status.xlsx`
+   is generated from it). Stages: Not started → In process → Validating → Parallel runs →
+   Productionized. NEVER auto-advance a flow's status. When a flow is ready to leave "In process"
+   for "Validating" (or any later stage), STOP and ask the user to confirm before you edit the CSV.
+   Productionized additionally requires the `/dp:signoff` attestation (user confirms independent
+   review + validation). On every confirmed status change, update the CSV and regenerate the xlsx.
+
+7. COMMIT (only on PASS, with explicit user yes)
    Commit this single flow on its branch. Cutover (deleting staging, retiring legacy) is a
    separate, deliberate step — legacy stays in place until then.
 
-Never modify ./context/ (recipe inputs are read-only, gitignored). Never DDL/DML legacy/production
-tables — all writes go to the disposable staging dataset until cutover. Do NOT start a second flow
-until this one is verified + committed.
+Never modify ./flows/<plan>/<flow>/recipe/ (recipe inputs are read-only, gitignored). Never DDL/DML
+legacy/production tables — all writes go to the disposable staging dataset until cutover. Do NOT
+start a second flow until this one is verified + committed.
 """

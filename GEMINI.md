@@ -18,24 +18,23 @@ This is the most important rule. The migration is sequential, not bulk.
   translate → compile/dry-run → parity-verify → document → commit. Only then pick the next.
 - **Never bulk-migrate.** If asked to "migrate everything" / "do all the flows," refuse the
   bulk action: explain why, then migrate the FIRST one only and report back.
-- **The only bulk-allowed step is discovery** (`@flow-inventory` across `context/`) — it is
-  read-only and just builds the backlog + catalog. Translation and promotion are one-at-a-time.
-- **Finish in-progress work first.** On resume, complete any flow marked `In progress` in
-  `docs/catalog.json` before starting a new one.
+- **The only bulk-allowed step is discovery** (`@flow-inventory` across the exported recipes) — it
+  is read-only and just builds the backlog + status tracker. Translation and promotion are one-at-a-time.
+- **Finish in-progress work first.** On resume, complete any flow marked `In process` in
+  `status/migration_status.csv` before starting a new one.
 - Work a **Plan** by planning it out, then migrating its flows one at a time in dependency order.
 - Keep the workspace clean: scratch goes in `output/temp/`; nothing at the folder root; every
   new file has a home per File discipline below.
 
 ## Targets — SQL-first (Python is a rare exception)
 
-- **BigQuery Standard SQL is the PRIMARY lane.** Every flow targets SQL (Dataform) unless SQL
-  literally cannot express the logic.
-- **Dual deliverable per flow (required):** (a) a Dataform model
-  `definitions/<plan>/<flow>/<flow>.sqlx` (`config { type: "operations", hasOutput: true, ... }`),
-  and (b) a standalone copy-paste `.sql` in `output/queries/<table>.sql` (config stripped,
-  run-instructions header) that runs as-is in the BigQuery console.
-- **Python is a RARE exception** (`python/<plan>/<flow>/`) — only when SQL can't express the logic
-  (heavy multi-step regex, row-wise/iterative logic, fuzzy match, ML/Vertex). Not first-class; justify it.
+- **BigQuery Standard SQL is the PRIMARY lane.** Every flow targets SQL unless SQL literally
+  cannot express the logic.
+- **Primary deliverable: ONE self-contained `flows/<plan>/<flow>/<flow>.sql`** — a clean,
+  console-runnable file (Create-Execute-Clean; config-free, run-instructions header). A
+  `<flow>.sqlx` Dataform wrapper is **OPTIONAL**, only when you want scheduled orchestration.
+- **Python is a RARE exception** (`flows/<plan>/<flow>/<flow>.py`) — only when SQL can't express
+  the logic (heavy regex, row-wise/iterative, fuzzy match, ML/Vertex). Not first-class; justify it.
 
 ## Translation rules
 
@@ -80,25 +79,52 @@ This is the most important rule. The migration is sequential, not bulk.
   are NEVER modified. New and legacy run side-by-side over a validation window before cutover.
 - Parity is target-agnostic — same check whether SQL or Python produced the table.
 
-## File discipline — folders mirror Plan → flow
+## File discipline — ONE folder per flow
 
-Per-flow folders are created by Gemini one at a time, with canonical names from catalog
-metadata — never pre-created or hand-named.
+Everything for a flow lives in `flows/<plan>/<flow>/`, created by Gemini one at a time with
+canonical names from catalog metadata — never pre-created or hand-named. Cross-flow tracking
+lives in `status/`. (No more parallel `context/`, `definitions/`, `output/queries`, `plans/` trees.)
 
-| Type | Folder |
+| Inside `flows/<plan>/<flow>/` | What |
 |---|---|
-| Exported recipe input (read-only, gitignored) | `context/<plan>/<flow>/` |
-| SQL Dataform model (`.sqlx`) | `definitions/<plan>/<flow>/` |
-| SQL console script (`.sql`, copy-paste) | `output/queries/<table>.sql` |
-| Python flows (`.py`, rare) | `python/<plan>/<flow>/` |
-| Parity evidence | `output/parity/<plan>/<flow>.md` |
-| Human Plan map | `plans/<plan>/README.md` |
-| Catalog dashboard | `docs/catalog.json` + `docs/catalog.html` |
+| `<flow>.sql` | **PRIMARY** — one self-contained, console-runnable BigQuery SQL |
+| `<flow>.sqlx` | OPTIONAL Dataform wrapper (scheduled orchestration only) |
+| `validation.sql` | a query the **user runs themselves** to compare new vs legacy |
+| `EXPLANATION.md` | plain-English: what / why / how to maintain / parity result |
+| `parity.md` · `governance.md` | audit evidence · governance result |
+| `recipe/` | exported recipe input (read-only, gitignored) |
+| `<flow>.py` | Python (rare exception only) |
 
-- `context/` is READ-ONLY. Copy out to work; never edit recipe inputs.
-- Never write migrated logic at the folder root. Scratch → `output/temp/`.
+| Cross-flow | Where |
+|---|---|
+| Live status tracker (open directly — no server) | `status/migration_status.csv` (+ generated `.xlsx`) |
+| Ranked backlog | `status/backlog.md` |
+| Plan map | `flows/<plan>/README.md` |
+
+- `recipe/` is READ-ONLY. Never write migrated logic at the repo root. Scratch → `output/temp/`.
 - **Sanitize folder names: ≤60 chars, `[a-zA-Z0-9_.-]` only, no flow-ID suffixes** — Windows
   `MAX_PATH` (260) truncates deep trees and silently fails extraction. See `references/windows-onedrive.md`.
+
+## Status lifecycle & governance — humans own this
+
+- Track every flow against the total inventory in `status/migration_status.csv`:
+  **Not started → In process → Validating → Parallel runs → Productionized.**
+- **Status changes are GATED.** Ask the user to confirm before advancing a flow's status —
+  especially into Validating / Parallel runs / Productionized. NEVER auto-advance.
+- **`@governance`** reviews a finished flow against the checklist (no hardcoding, header + inline
+  comments, single self-contained file, strict parity green, `validation.sql` + `EXPLANATION.md`
+  present, naming, read-only/staging) → `governance.md`. See `references/governance.md`.
+- **Productionized requires `/dp:signoff`** — the user must attest they independently REVIEWED the
+  SQL and ran their OWN validation. Gemini never self-promotes. The team is responsible regardless
+  of how it was built — no rubber-stamping.
+
+## Output standards (hard rules — see `references/output-standards.md`)
+
+- **No hard-coded values.** Load/run dates and env-specific values become variables/params
+  (`DECLARE`, `CURRENT_DATE()`, query parameters, Dataform vars). Mandatory for automation.
+- **Heavy commenting.** File header (what/why/when/source/owner/parity) + an inline comment on
+  every CTE tracing to its recipe node. No `SELECT *` in joins.
+- **One self-contained `.sql` per flow** + a user-runnable `validation.sql` + an `EXPLANATION.md`.
 
 ## Safety & access
 
@@ -132,7 +158,7 @@ The project is version-controlled with **git**. This works the same whether or n
 
 - **No remote yet?** Run `git init` here and commit. You get full history/rollback today, on
   one machine. When a remote is ready: `git remote add origin <url>` and `git push` — the whole
-  history goes with it, and CI/Pages (GitHub Pages or GitLab Pages) turn on. Nothing to redo.
+  history goes with it. Nothing to redo.
 - **One flow = one branch = one commit (or MR).** Before migrating a flow, create a branch
   `migrate/<plan>-<flow>`. Do the full end-to-end migration on it. Commit when parity is green.
   This makes every flow individually reviewable and keeps the trunk clean.
@@ -145,11 +171,13 @@ The project is version-controlled with **git**. This works the same whether or n
 
 ## Agents
 
-- `@flow-inventory` — recipe package → backlog + dependency graph + complexity + target pick. Read-only.
-- `@recipe-translator` — recipe → commented `.sqlx` or `.py`. Writes to `definitions/` or `python/`.
-- `@parity-auditor` — staging run + 4-tier diff (frozen input) → pass/fail report. Read-only against legacy.
+- `@flow-inventory` — recipe package → backlog + dependency graph + complexity. Writes `status/`. Read-only on Dataprep.
+- `@recipe-translator` — recipe → one commented `<flow>.sql` (+ validation.sql, EXPLANATION.md). Writes `flows/<plan>/<flow>/`.
+- `@parity-auditor` — frozen-input 4-tier diff in staging → `parity.md` + `validation.sql`. Read-only on legacy.
+- `@governance` — readiness checklist on a finished flow → `governance.md`. Read-only.
 
 ## Commands
 
-- `/dp:start` — orient/resume: shows progress, enforces one-flow-at-a-time, helps you pick the next.
-- `/dp:migrate <flow>` — the golden path for ONE flow: inventory → translate → verify → document.
+- `/dp:start` — orient/resume: shows status, enforces one-flow-at-a-time, helps pick the next.
+- `/dp:migrate <flow>` — the golden path for ONE flow: inventory → translate → verify → govern → document.
+- `/dp:signoff <flow>` — human attests independent review + validation → status Productionized.

@@ -1,0 +1,4 @@
+plan,flow,status,target,owner,last_updated,validated,signed_off_by,signed_off_date,notes
+Customer 360,cust_clean,Productionized,SQL,Data Eng,2026-06-12,yes,N. Ziemkowsky,2026-06-12,parity green
+Sales Daily,sales_mart,Validating,SQL,Sales BI,2026-06-17,no,,,awaiting independent validation
+Finance Close,gl_normalize,Not started,SQL,Finance,,no,,,

@@ -8,8 +8,9 @@ max_turns: 18
 timeout_mins: 8
 ---
 
-You profile Dataprep flows for migration. Input: exported flow packages in `context/<plan>/<flow>/`.
-You do NOT translate — you classify and plan. Discovery is the ONLY bulk-allowed step (read-only).
+You profile Dataprep flows for migration. Input: exported flow packages in
+`flows/<plan>/<flow>/recipe/` (read-only, gitignored). You do NOT translate — you classify and
+plan. Discovery is the ONLY bulk-allowed step (read-only).
 
 ## API-optional input
 
@@ -18,8 +19,9 @@ Packages may arrive two ways — treat them identically:
   to export each ZIP.
 - **Manual**: UI "Export Flow" yields the IDENTICAL ZIP; or you are handed a pasted flow list
   (names/ids) with packages exported just-in-time per flow.
-Either way you read whatever is present under `context/`. If only a pasted list exists (no
-packages yet), seed catalog stubs from the list (name/id/plan) and mark them `Not started`.
+Either way you read whatever is present under `flows/<plan>/<flow>/recipe/`. If only a pasted list
+exists (no packages yet), seed catalog stubs from the list (name/id/plan) and mark them
+`Not started` in `status/migration_status.csv`.
 
 **Dataprep API is READ-ONLY here — GET only.** Never call write/run/delete endpoints. The
 non-negotiable query params for every list endpoint (see `references/dataprep-api.md`):
@@ -28,13 +30,14 @@ non-negotiable query params for every list endpoint (see `references/dataprep-ap
 - Always append `flowsFilter=all` / `plansFilter=all`. The default returns only resources OWNED by
   the token's user — missing team-shared flows and ex-employees' flows.
 
-**Folder names (Windows MAX_PATH):** when packages are extracted into `context/`, folder names
-must be **sanitized to ≤60 chars with NO flow-ID suffix** — deep paths + long flow names blow the
-260-char MAX_PATH and cause silent extraction failures. Use the canonical sanitized name.
+**Folder names (Windows MAX_PATH):** when packages are extracted into `flows/<plan>/<flow>/recipe/`,
+folder names must be **sanitized to ≤60 chars with NO flow-ID suffix** — deep paths + long flow
+names blow the 260-char MAX_PATH and cause silent extraction failures. Use the canonical sanitized
+name.
 
 ## What you do
 
-1. Read the flow package (`flow.json`, `recipes/`, `inputs/`, `outputs/` — see
+1. Read the flow package under `recipe/` (`flow.json`, `recipes/`, `inputs/`, `outputs/` — see
    `references/recipe-anatomy.md`). Identify source dataset(s), output table(s), ordered steps.
 2. For each step, record the Wrangle transform type (set/derive, filter, join, aggregate, pivot,
    unpivot, dedupe, replace, extractpatterns, valuestonull, etc.).
@@ -86,4 +89,7 @@ FLOW: <name> (flow_id <id>)   plan: <plan>
 
 For a batch, also emit a **ranked backlog** (dependency order — upstream flows first), the
 **dependency edges** (the per-plan DAG / run order), and **per-flow catalog entries**. The
-orchestrator writes the backlog to `output/backlog.md` and the entries to `docs/catalog.json`.
+orchestrator writes everything under `status/`: the backlog + catalog as `status/migration_status.csv`
+(+ generated `status/migration_status.xlsx`), and seeds each flow as **`Not started`** in the live tracker
+`status/migration_status.csv` (the source of truth; a `status/migration_status.xlsx` is generated
+from it).

@@ -1,0 +1,32 @@
+description = "Sign off a migrated flow to Productionized — requires the user to attest independent review + validation. Usage: /dp:signoff <plan>/<flow>"
+prompt = """
+--- SIGN OFF ONE FLOW (human attestation required) ---
+
+The team OWNS this migration. Gemini does NOT self-promote. This command records a human's
+attestation and only then advances a flow's status to Productionized.
+
+1. Identify the flow (argument, or ask which). Read `flows/<plan>/<flow>/`:
+   `<flow>.sql`, `parity.md`, `validation.sql`, `EXPLANATION.md`, `governance.md`.
+
+2. Show a concise readiness summary:
+   - parity result (must be GREEN or every diff documented),
+   - governance result (READY?),
+   - the `validation.sql` the user can run themselves,
+   - one line on what the flow does.
+   IF governance is NOT READY, or parity isn't green/documented → STOP. List what to fix.
+   Do not sign off. Leave status unchanged.
+
+3. Require the user to ATTEST — ask explicitly and wait for a clear yes to BOTH:
+   - "Have you independently REVIEWED the SQL yourself (not just trusted Gemini)?"
+   - "Have you run your OWN validation (e.g. `validation.sql`) and accept the result?"
+   If either answer is no/unsure → do NOT productionize. Suggest status stays `Validating`.
+
+4. ONLY on a clear yes to both:
+   - Update `status/migration_status.csv` for this flow: `status=Productionized`,
+     `signed_off_by=<user>`, `signed_off_date=<today>`, `validated=yes`.
+   - Regenerate `status/migration_status.xlsx` + `status/migration_status.csv` (lock-safe writes).
+   - Append one audit line. Confirm: "<plan>/<flow> productionized — signed off by <user> on <date>."
+
+NEVER set Productionized without the explicit double attestation. This is the ownership gate:
+users are responsible for these pipelines regardless of how they were built.
+"""

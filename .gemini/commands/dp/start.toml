@@ -6,14 +6,15 @@ Goal of this command: orient the user and get them working on exactly ONE flow. 
 bulk work. Discovery (read-only inventory) is the ONLY bulk-allowed step. Keep it short.
 
 1. READ STATE (read-only):
-   - docs/catalog.json — per-flow status (Verified / In progress / Not started / Failed), if present
-   - output/backlog.md — ranked migration order + dependencies, if present
+   - status/migration_status.csv — the live tracker / source of truth: per-flow status across the
+     5 stages (Not started → In process → Validating → Parallel runs → Productionized), if present.
+   - status/migration_status.csv — per-flow catalog metadata (sources, deps, native-gen), if present.
    - .env (presence only — check IF Dataprep API creds exist; NEVER print secrets) and .env.example
    - git: current branch and whether the tree is clean
 
 2. DECIDE: first-time setup vs resume.
 
-   IF no catalog.json AND no backlog.md → FIRST-TIME SETUP:
+   IF no status/migration_status.csv AND no status/migration_status.csv → FIRST-TIME SETUP:
    - Confirm the essentials, asking only what you can't infer:
        * GCP project + the disposable staging dataset name (default dataprep_migration_staging,
          with a default table expiration so it self-cleans).
@@ -23,35 +24,40 @@ bulk work. Discovery (read-only inventory) is the ONLY bulk-allowed step. Keep i
          only, never write/run/delete): auto-sweep `GET /v4/flows?limit=250&flowsFilter=all` to
          list (the `limit` defeats a silent 25-item cap; `flowsFilter=all` includes team-shared and
          ex-employee flows), then bulk-export each `GET /v4/flows/{id}/package` ZIP into
-         context/<plan>/<flow>/. Extracted folder names are sanitized to ≤60 chars, no flow-ID
+         flows/<plan>/<flow>/recipe/. Extracted folder names are sanitized to ≤60 chars, no flow-ID
          suffix (Windows MAX_PATH). For plan run-state, read the embedded `latestPlanSnapshotRun`
          from `GET /v4/plans?limit=250&plansFilter=all` — NOT `/v4/planSnapshotRuns` (transient
          IDs, 403s, false "Never Run").
        * IF NO API creds (business unit may have none) → guide the manual path: UI "Export Flow"
-         (yields the IDENTICAL ZIP) into context/, OR paste a flow list (names/ids) to seed the
-         catalog now and export packages just-in-time per flow.
+         (yields the IDENTICAL ZIP) into flows/<plan>/<flow>/recipe/, OR paste a flow list
+         (names/ids) to seed the tracker now and export packages just-in-time per flow.
    - Once packages OR a pasted list exist, offer DISCOVERY — the ONE bulk step (read-only):
-       @flow-inventory across context/ → write output/backlog.md + docs/catalog.json
-       (backlog, per-plan DAG, per-flow catalog entries incl. native-gen eligibility).
+       @flow-inventory across flows/*/*/recipe/ → write status/migration_status.csv (+ migration_status.xlsx) and
+       seed every flow as `Not started` in status/migration_status.csv (then generate the .xlsx).
    - Report what you set up. Then go to step 4.
 
    ELSE → RESUME:
-   - Greet with a one-line status from catalog.json:
-       "X of N flows migrated · Y verified · Z in progress · over P plans."
-   - If anything is `In progress` or `Failed` → surface it FIRST: that gets finished before
-     anything new is started.
-   - Otherwise show the next 1–3 flows in dependency order from the backlog (upstream first).
+   - Greet with a one-line status from status/migration_status.csv across the 5 stages:
+       "Of N flows: A not started · B in process · C validating · D parallel runs · E productionized,
+        over P plans."
+   - If anything is `In process`, `Validating`, or `Parallel runs` → surface it FIRST: those get
+     finished before anything new is started.
+   - Otherwise show the next 1–3 `Not started` flows in dependency order from the catalog (upstream
+     first).
 
 3. (No bulk actions. Discovery is the only thing that may span all flows, and only because it's read-only.)
 
 4. PICK ONE:
    - Ask: "Which ONE flow do you want to work on?" (or "Which plan do you want to plan out first?")
    - A Plan is the orchestration unit (→ Dataform tag-group + schedule, or a Composer DAG). The user
-     works a Plan by planning it (run order + schedule into plans/<plan>/README.md), then migrating
+     works a Plan by planning it (run order + schedule into flows/<plan>/README.md), then migrating
      its flows one at a time in dependency order.
-   - When they choose a flow, hand off to `/dp:migrate context/<plan>/<flow>/`. The /dp:migrate command
-     CREATES the per-flow folder (definitions/<plan>/<flow>/ or python/<plan>/<flow>/) and the
-     branch `migrate/<plan>-<flow>` from canonical catalog names — never pre-create or hand-name them.
+   - When they choose a flow, hand off to `/dp:migrate flows/<plan>/<flow>/`. That command works the
+     existing per-flow folder + creates the branch `migrate/<plan>-<flow>` from canonical catalog
+     names — never hand-name them.
+   - Status changes are GATED: never auto-advance a flow in status/migration_status.csv. Advancing
+     to Validating / Parallel runs / Productionized always requires the user to confirm first
+     (Productionized also requires `/dp:signoff`).
    - DO NOT begin a second flow until the current one is verified + committed. If the user asks
      to "do them all," explain the one-at-a-time rule and start with just the first.
 

@@ -1,7 +1,9 @@
 # Python lane — when and how
 
 For flows whose logic is unreadable or inexpressible as SQL. Python is a rare exception (SQL-first),
-not a fallback — but default to SQL and escalate deliberately.
+not a fallback — but default to SQL and escalate deliberately. When chosen, the deliverable is
+`flows/<plan>/<flow>/<flow>.py` (same per-flow folder as the SQL lane), alongside its
+`validation.sql`, `parity.md`, and `EXPLANATION.md`.
 
 ## Choose Python when the recipe has
 
@@ -33,6 +35,8 @@ applies; most flows fall back to transpilation.
 
 ```python
 import bigframes.pandas as bpd
+from datetime import date
+load_date = date.today()                # param/derived — never hard-code load/run dates
 df = bpd.read_gbq("raw.customers")
 # ... commented blocks, one per recipe step ...
 # Write only to the disposable, write-guarded staging dataset:
@@ -58,8 +62,10 @@ tag-group on a scheduled run, or a **Cloud Composer (Airflow) DAG** when Python 
 jobs need orchestrating together. Vertex AI pipeline if the flow includes ML/scoring. Keep one
 choice consistent per LOB.
 
-The SQL (Dataform) and Python lanes orchestrate together: Dataform builds the SQL models; the
-scheduler/Composer DAG triggers Python steps that read/write the same BigQuery datasets, in plan order.
+The SQL and Python lanes orchestrate together only when scheduled: the optional Dataform wrapper
+builds the SQL models; the scheduler/Composer DAG triggers Python steps that read/write the same
+BigQuery datasets, in plan order. (For one-off runs, each `<flow>.sql` / `<flow>.py` just runs on
+its own — no orchestrator needed.)
 
 ## Parity
 

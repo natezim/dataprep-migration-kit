@@ -5,14 +5,17 @@ is a rare optional accelerator, not the default.**
 
 ## Path B — Transpilation (PRIMARY)
 
-Translate the raw Wrangle from `context/<plan>/<flow>/` directly using the registry below. This
+Translate the raw Wrangle from `flows/<plan>/<flow>/recipe/` directly using the registry below. This
 is the owned, always-available engine and the cleanup layer for Path A. **One commented block
 per recipe step, original Wrangle quoted.** Default runtime **bigframes**
 (`bigframes.pandas`, pushes down to BigQuery); plain pandas for small data; **PySpark** for
 large-scale Spark/Dataproc targets.
 
 ### Conventions
-- Module docstring: source flow, why Python, output table, parity report path.
+- Module docstring: source flow, why Python, output table, parity report path
+  (`flows/<plan>/<flow>/parity.md`).
+- The Python file lives at `flows/<plan>/<flow>/<flow>.py`. No hard-coded load/run dates or
+  env-specific values — read them from params/`date.today()`, never bake literals in.
 - Read: `df = bpd.read_gbq("dataset.table")`. Write only to the disposable staging dataset:
   `df.to_gbq("dataprep_migration_staging.<table>", if_exists="replace")`.
 

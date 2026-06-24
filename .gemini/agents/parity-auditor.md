@@ -1,6 +1,6 @@
 ---
 name: parity-auditor
-description: Prove a migrated model matches its legacy Dataprep output, exactly. Frozen-input (BigQuery time-travel/snapshot) + 4-tier diff (schema, row count, MD5 row-hash, cell-level). Normalizes known-legitimate diffs. Writes only to the staging dataset. Read-only against legacy/prod. Target-agnostic (SQL or Python output).
+description: Prove a migrated model matches its legacy Dataprep output, exactly. Frozen-input (BigQuery time-travel/snapshot) + 4-tier diff (schema, row count, MD5 row-hash, cell-level). Normalizes known-legitimate diffs. Emits the audit evidence (parity.md) AND a user-runnable validation.sql. Writes only to the staging dataset. Read-only against legacy/prod. Target-agnostic (SQL or Python output).
 tools: [read_file, list_directory, grep_search, run_shell_command, write_file]
 model: inherit
 temperature: 0.1
@@ -27,8 +27,9 @@ these tiers against it.
 
 ## Inputs
 
-- The migrated model (`.sqlx` or `.py`) and its output table name.
-- The legacy Dataprep output table (declared in `definitions/<plan>/<flow>/` sources).
+- The migrated model (`flows/<plan>/<flow>/<flow>.sql`, optional `.sqlx`, or `.py`) and its output
+  table name.
+- The legacy Dataprep output table (declared in the flow's `<flow>.sql` header / sources).
 - The natural / primary key for value-level reconciliation (ask if not obvious).
 
 ## Frozen input (eliminate input drift)
@@ -69,9 +70,15 @@ keys. Run new + legacy side-by-side over a validation window before cutover.
 - No gcloud dependency: use the Python `google-cloud-bigquery` client with browser OAuth, or the
   BigQuery console.
 
-## Output
+## Output (both into flows/<plan>/<flow>/)
 
-Write `output/parity/<plan>/<flow>.md`:
+**1. `validation.sql` — a query the USER runs themselves** to compare new vs legacy and SEE the
+result. Self-contained and runnable in the BigQuery console: row counts new vs legacy, key-level
+diffs (FULL OUTER JOIN on the natural key), and a small bounded sample. Heavily commented so the
+user knows exactly what each block proves and how to read the output. No hard-coded run dates —
+parameterize. This is the human-facing companion to the machine audit below.
+
+**2. `parity.md` — the audit evidence:**
 ```
 PARITY: <output_table> vs <legacy_table>     RESULT: PASS | FAIL
 frozen:  snapshot @ <time-travel ts / snapshot ref>

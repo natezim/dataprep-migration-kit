@@ -1,11 +1,12 @@
 ---
 name: dataprep-migration
 description: >
-  Migrate Dataprep (Trifacta) flows into BigQuery SQL (Dataform) or Python. Use whenever the
-  user is translating an exported Dataprep recipe, profiling flows for migration, choosing a
-  SQL-vs-Python target, writing the migrated model, or running a parity audit against the
-  legacy Dataprep output table. Covers Wrangle→SQL and Wrangle→Python transform mappings,
-  recipe JSON anatomy, Dataform conventions, and the reconciliation harness.
+  Migrate Dataprep (Trifacta) flows into BigQuery SQL — one self-contained .sql file per flow.
+  Use whenever the user is translating an exported Dataprep recipe, profiling flows for
+  migration, writing the migrated SQL, running a parity audit against the legacy Dataprep
+  output, governance-reviewing a finished flow, or signing it off to Productionized. Covers
+  Wrangle→SQL (and rare →Python) transform mappings, recipe JSON anatomy, the status lifecycle,
+  output standards, governance, and the reconciliation harness.
 ---
 
 # Dataprep Migration
@@ -16,27 +17,45 @@ transpilation** — apply the reviewed mapping, don't reinvent per flow.
 
 **One flow at a time, end-to-end, before the next.** One flow = one branch = one session =
 one commit. Bulk migration is refused; only discovery (read-only) is bulk. Gemini creates one
-per-flow folder at a time, with canonical names.
+per-flow folder (`flows/<plan>/<flow>/`) at a time, with canonical names. **The team owns the
+migration — Gemini assists, humans validate and sign off.**
 
 ## The method (per flow)
 
 1. **Inventory** the flow package — sources, output(s), ordered steps, DAG deps, complexity,
    target. Package comes via the Dataprep API (`GET /v4/flows/{id}/package`) OR the UI
-   "Export Flow" (identical ZIP) — **API-optional**. (`recipe-anatomy.md` for package/DAG.)
-2. **Pick the target — SQL-first.** BigQuery Standard SQL (Dataform) is the primary lane; Python
-   is a **rare exception** only when SQL can't express the logic. Produce the **dual deliverable**:
-   a Dataform `.sqlx` AND a standalone copy-paste `.sql`.
+   "Export Flow" (identical ZIP) — **API-optional**. Recipe lives in
+   `flows/<plan>/<flow>/recipe/` (read-only). (`recipe-anatomy.md` for package/DAG.)
+2. **Pick the target — SQL-first.** BigQuery Standard SQL is the primary lane; Python is a
+   **rare exception** only when SQL can't express the logic. **Primary deliverable: one
+   self-contained `flows/<plan>/<flow>/<flow>.sql`**; an optional `<flow>.sqlx` Dataform wrapper
+   only when you want scheduled orchestration.
 3. **Translate, transpile-first** — apply the transform dictionary and reuse pushdown SQL for
    BigQuery-source flows. Use the **Create-Execute-Clean** lifecycle for GCS-CSV sources (mount
    `EXT_*` external tables with `allow_quoted_newlines=true` → build `STG_*` via a CTE-per-recipe-node
-   graph → DROP externals). Native code-gen (`wrangleToPython`) is a **rare accelerator only**.
-   Apply the five corruption fixes.
-4. **Compile & dry-run** — catch structure/syntax/cost before a real run.
+   graph → DROP externals) — all in the one `.sql` file. **No hard-coded values** (dates/params →
+   `DECLARE` / `CURRENT_DATE()` / query params); file header + one inline comment per CTE. Native
+   code-gen (`wrangleToPython`) is a **rare accelerator only**. Apply the five corruption fixes.
+4. **Compile & dry-run** — BigQuery dry-run for syntax/cost; `dataform compile` if a `.sqlx`
+   wrapper exists.
 5. **Parity audit** — freeze the input (snapshot/time-travel), run into staging, 4-tier diff vs
    legacy (schema → row count → MD5 row-hash → cell-level), exact match in **Strict Parity** mode
    (reproduce legacy exactly, incl. its bugs). Clean Promotion is a documented post-pass.
-6. **Promote** — green parity → merge + log. Run side-by-side over a validation window; legacy
-   never touched.
+   Write `parity.md` (evidence) and a `validation.sql` the **user runs themselves**.
+6. **Governance review** — `@governance` checks the finished flow against the checklist (no
+   hardcoding, header + inline comments, single self-contained file, strict parity green,
+   `validation.sql` + `EXPLANATION.md` present, naming, read-only/staging) → governance report.
+   Write `EXPLANATION.md` (plain-English: what / why / how to maintain / parity result).
+7. **Status + signoff** — advance status only with user confirmation (gated). **Productionized
+   requires `/dp:signoff`** — the user attests they independently validated it. Run side-by-side
+   over a validation window (*Parallel runs*); legacy never touched.
+
+## Status lifecycle (gated)
+
+Track each flow against the total inventory in `status/migration_status.csv` (+ `.xlsx`):
+**Not started → In process → Validating → Parallel runs → Productionized.** Status changes are
+**gated** — ask the user to confirm before advancing. **Productionized requires `/dp:signoff`**;
+Gemini never self-promotes.
 
 ## Transpile-first; native code-gen is a rare accelerator
 
@@ -74,11 +93,16 @@ SQL is the default; Python is a rare exception — and say why in the file heade
 
 ## Output shape (non-negotiable for maintainability)
 
-- **Dual deliverable:** a Dataform `.sqlx` (`type:"operations", hasOutput:true`) in
-  `definitions/<plan>/<flow>/` AND a copy-paste `.sql` (config stripped) in `output/queries/<table>.sql`.
-- One **CTE per legacy recipe node**, commented with its recipe ID; no `SELECT *` in joins.
-- Tag every model `plan:<name>` and `lob:<name>`. Add assertions (uniqueKey, nonNull) inline.
-- Per-flow folders, canonical names (≤60 chars, no flow-IDs — Windows MAX_PATH). See `dataform-conventions.md`.
+- **Primary deliverable:** ONE self-contained, console-runnable `flows/<plan>/<flow>/<flow>.sql`
+  (Create-Execute-Clean: `EXT_*` mounts → `STG_*` CTE graph → `DROP`). Optional `<flow>.sqlx`
+  Dataform wrapper only for scheduled orchestration (`type:"operations", hasOutput:true`).
+- **No hard-coded values** — dates/params → `DECLARE` / `CURRENT_DATE()` / query parameters.
+- **Heavy commenting** — a file header plus one inline comment per CTE tracing to its recipe
+  node; no `SELECT *` in joins.
+- Per flow, also ship **`validation.sql`** (the user runs it to compare new vs legacy) and
+  **`EXPLANATION.md`** (plain-English what/why/maintain/parity). Audit evidence → `parity.md`.
+- Per-flow folders, canonical names (≤60 chars, no flow-IDs — Windows MAX_PATH). See
+  `dataform-conventions.md` and `output-standards.md`.
 
 ## Parity is target-agnostic + frozen-input
 
@@ -96,9 +120,11 @@ dataset `dataprep_migration_staging`; legacy/prod are read-only (SELECT-only).
 | `references/recipe-anatomy.md` | Reading/parsing exported flow packages; mapping structure to steps |
 | `references/wrangle-to-sql.md` | Wrangle → BigQuery SQL + the Create-Execute-Clean external-table pattern |
 | `references/wrangle-to-python.md` | Wrangle → pandas/PySpark (rare); the five corruption fixes |
-| `references/dataform-conventions.md` | Folder layout, dual deliverable, `.sqlx` operations config, EXT_/STG_ naming |
+| `references/dataform-conventions.md` | Per-flow folder layout, single-`.sql` primary, optional `.sqlx` config, EXT_/STG_ naming |
+| `references/output-standards.md` | No-hardcoding, header + per-CTE commenting, single self-contained file, `validation.sql` + `EXPLANATION.md` requirements |
+| `references/governance.md` | Governance checklist, the `@governance` review, status lifecycle, `/dp:signoff` gate |
 | `references/python-lane.md` | The rare Python path: bigframes vs pandas, auth, scheduling |
-| `references/parity-harness.md` | Frozen input, 4-tier diff, Strict-Parity vs Clean-Promotion |
+| `references/parity-harness.md` | Frozen input, 4-tier diff, Strict-Parity vs Clean-Promotion, `validation.sql` |
 | `references/windows-onedrive.md` | MAX_PATH name sanitization, OneDrive file-lock fallback writes |
 
 > **Build status:** these references are drafted from known Wrangle semantics and get

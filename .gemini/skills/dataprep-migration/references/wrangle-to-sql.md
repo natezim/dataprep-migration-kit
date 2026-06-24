@@ -1,9 +1,15 @@
 # Wrangle → BigQuery SQL — transform dictionary
 
 The core asset. Each Dataprep Wrangle step maps to a BigQuery SQL pattern. Apply these;
-don't improvise. **One CTE per recipe node.** BigQuery Standard SQL (Dataform) is the
-**primary and default** lane — Python is a rare exception (see `wrangle-to-python.md`),
-used only when SQL functionally cannot express the logic.
+don't improvise. **One CTE per recipe node.** BigQuery Standard SQL is the **primary and
+default** lane — Python is a rare exception (see `wrangle-to-python.md`), used only when SQL
+functionally cannot express the logic.
+
+**The PRIMARY deliverable is a standalone single `.sql` file** —
+`flows/<plan>/<flow>/<flow>.sql` — one self-contained, console-runnable script
+(Create-Execute-Clean: `EXT_` external tables → `STG_` CTE graph → DROP). It must run **as-is**
+in the BigQuery console with zero edits. A Dataform `.sqlx` wrapper is **optional**, only for
+scheduled orchestration (see `dataform-conventions.md`).
 
 ## The "Create-Execute-Clean" lifecycle (GCS-CSV sources)
 
@@ -46,9 +52,57 @@ DROP EXTERNAL TABLE IF EXISTS `proj.dataprep_migration_staging.EXT_USER_ALLOC`;
 **Naming:** `EXT_` for external (GCS) tables, `STG_` for staging output tables; all in the
 disposable `dataprep_migration_staging` dataset.
 
+## NO HARD-CODED VALUES — parameterize for automation
+
+The standalone `.sql` is meant to run unattended, so **never bake in load/run dates or
+environment-specific values**. Every value that changes between runs becomes a variable or
+parameter. This is essential — a hard-coded `'2026-06-24'` silently rots the moment it ships.
+
+- **Run/load dates** → `CURRENT_DATE()` / `CURRENT_TIMESTAMP()`, not a literal. A legacy
+  `where load_date = '2026-06-24'` becomes `where load_date = CURRENT_DATE()` (or an offset).
+- **Reusable constants** → `DECLARE` a typed variable at the top of the script and reference it:
+  ```sql
+  DECLARE run_date DATE DEFAULT CURRENT_DATE();
+  DECLARE lookback_days INT64 DEFAULT 30;
+  -- ... where event_date between date_sub(run_date, interval lookback_days day) and run_date
+  ```
+- **Console parameters** → use `@param` query parameters where the runner supplies values.
+- **Dataform wrapper** → when an optional `.sqlx` exists, surface the same values as Dataform
+  `vars` so the script and the wrapper stay in sync.
+- **GCS URIs / project / dataset** that differ per env → `DECLARE` them too, or template via
+  Dataform vars; don't scatter literals through the body.
+
+> If you must keep a literal for Strict-Parity reproduction (e.g. a date the legacy run pinned),
+> `DECLARE` it with a comment explaining why — keep it visible, not buried inline.
+
+## HEAVY COMMENTING — make the script self-documenting
+
+The deliverable is read by humans who own it after Gemini is gone. Over-comment, don't under.
+
+- **Header block** at the top of every `.sql`: what the flow does, why it exists, when/how often
+  it runs, the **source** tables/URIs, the **owner**, and the **parity** status (Strict/Clean +
+  link to `parity.md`).
+  ```sql
+  -- =====================================================================
+  -- Flow:    retail_nightly / cust_clean
+  -- What:    Cleans + dedupes the nightly customer feed into STG_CUST_CLEAN.
+  -- Why:     Replaces legacy Dataprep flow "Customer Clean" (read-only).
+  -- When:    Nightly, after the raw load lands (~02:00). run_date = CURRENT_DATE().
+  -- Source:  gs://my-bucket/retail/customers_*.csv  → EXT_CUSTOMERS
+  -- Owner:   retail-data-eng@yourcompany.com
+  -- Parity:  Strict — green as of 2026-06-20. See parity.md.
+  -- =====================================================================
+  ```
+- **Inline comment on EVERY CTE**: quote the original Wrangle verbatim **and** note the original
+  legacy recipe ID, so the graph maps back to the source flow.
+
 > **DRAFT.** Patterns below are from known Wrangle semantics. Validate each against a real
 > recipe + green parity audit before trusting it. When you hit a step not listed here,
 > translate carefully, add `-- TODO: verify`, and append the new mapping to this file.
+
+Each flow folder also ships a **validation.sql** (a query the *user* runs to compare new vs
+legacy themselves — the team owns validation; don't rely on Gemini) and an **EXPLANATION.md**
+(plain-English walkthrough). See `parity-harness.md`.
 
 > **Transpile-first.** The transform dictionary below is the primary engine. For BigQuery-source
 > flows there's a **fast path — pushdown SQL**: Dataprep already compiles Wrangle into standard SQL

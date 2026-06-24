@@ -40,7 +40,7 @@ Edit `.env`:
 - `DATAPREP_API_BASE_URL` — your Dataprep host (or leave default; only needed for API export).
 - `DATAPREP_API_TOKEN` — your PAT (optional; skip if you'll export from the UI).
 
-Edit `workflow_settings.yaml` (Dataform):
+Edit `workflow_settings.yaml` (only needed if you use the optional `.sqlx` Dataform wrapper):
 - `defaultProject` — your GCP project id.
 - `defaultDataset` — keep `dataprep_migration_staging` (the disposable staging dataset).
 - `defaultLocation` — your BigQuery region (e.g. `US`).
@@ -55,19 +55,26 @@ gemini      →   /dp:start
 Dataprep API access (and falls back to UI export if not), and offers to run discovery. Then:
 
 1. **Export one flow** — API (`GET /v4/flows/{id}/package`) or the UI **Export Flow** button —
-   and unzip it into `context/<plan>/<flow>/`.
-2. Run **`/dp:migrate context/<plan>/<flow>/`** for that one flow.
-3. Review the output + the parity report. Commit. Then the next flow.
+   and unzip it into `flows/<plan>/<flow>/recipe/`.
+2. Run **`/dp:migrate <flow>`** for that one flow. Everything it produces — `<flow>.sql`,
+   `validation.sql`, `EXPLANATION.md`, `parity.md` — lands in `flows/<plan>/<flow>/`.
+3. Review the output, run `validation.sql` yourself, read `parity.md`. Commit.
+4. When satisfied, run **`/dp:signoff <flow>`** to attest you validated it → the flow's status
+   advances to **Productionized**.
 
 **One flow at a time.** Bulk runs are refused by design; only read-only discovery is bulk.
+**Status changes are gated** — Gemini confirms with you before advancing a flow.
 
-## 5. See the catalog
+## 5. Track progress
 
-The dashboard reads `docs/catalog.json`. Browsers block that when you double-click the HTML, so:
-```powershell
-cd docs ; python -m http.server      # then open http://localhost:8000/catalog.html
-```
-Once you enable GitHub Pages on the repo, `.github/workflows/pages.yml` publishes it at a URL.
+The live tracker `status/migration_status.csv` (+ Excel) records each flow's stage —
+**Not started → In process → Validating → Parallel runs → Productionized** — against the total
+inventory. `/dp:start` reads it to pick the next flow and resume in-progress work.
+
+## 6. See the status tracker
+
+Just open **`status/migration_status.xlsx`** in Excel (or `status/migration_status.csv` in any
+viewer). No server, no hosting — it's a plain file that the toolkit updates as flows progress.
 
 ## First-run reality check
 

@@ -23,7 +23,8 @@ def get_clean_folder_name(name):
 ```
 
 Keeps directory trees shallow and human-readable, e.g.
-`context/sas_audit/<clean_folder_name>/` — NOT `..._flow_id_4f9a2c8b/`.
+`flows/sas_audit/<clean_folder_name>/recipe/` — NOT `..._flow_id_4f9a2c8b/`. Apply the same
+sanitization to the `<plan>` and `<flow>` segments of every `flows/<plan>/<flow>/` path.
 
 ## 2. OneDrive exclusive locks — fallback-write so the script never halts
 
@@ -39,13 +40,15 @@ def safe_write(write_fn, primary_path, fallback_path):
         write_fn(primary_path)
         return primary_path
     except PermissionError:                       # WinError 32 — file is locked / open / syncing
-        write_fn(fallback_path)                    # e.g. output/data/catalog_database_ready.xlsx
+        write_fn(fallback_path)                    # e.g. status/catalog_database_ready.xlsx
         print(f"Locked: {primary_path} — wrote fallback {fallback_path}")
         return fallback_path
 ```
 
-Apply this to the pandas/openpyxl Excel writer, `backlog.md`, `catalog.json`, and any
-report. The script must complete even if a target file is open in Excel or mid-sync.
+Apply this to the pandas/openpyxl Excel writer and every `status/` artifact —
+`status/backlog.md`, `status/migration_status.csv`, `status/migration_status.xlsx`,
+`status/migration_status.csv`. The script must complete even if a target file is open in Excel
+or mid-sync.
 
 ## 3. Don't sync `.git` — keep it out of OneDrive
 

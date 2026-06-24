@@ -6,49 +6,46 @@ The golden rule: **one flow at a time, end to end.** No bulk runs. This is what 
 ## The loop (per flow)
 
 1. **`git pull`** — get the latest.
-2. **`/dp:start`** in Gemini CLI — it shows progress and helps you pick the next flow (in
-   dependency order). Finish anything `In progress` before starting something new.
+2. **`/dp:start`** in Gemini CLI — it shows progress (from `status/migration_status.csv`) and
+   helps you pick the next flow (in dependency order). Finish anything `In process` first.
 3. **Branch** — `git checkout -b migrate/<plan>-<flow>` (one flow = one branch).
-4. **`/dp:migrate context/<flow>`** — translate → compile/dry-run → parity-verify → document.
-5. **Review the diff** — read what Gemini produced. The parity report must be green.
-6. **Commit** — `git commit` (one flow per commit). Update `docs/catalog.json` status.
-7. **Push / pull request (or merge request)** — when a GitHub or GitLab remote exists. Until
+4. **`/dp:migrate <flow>`** — translate into one self-contained `<flow>.sql` → compile/dry-run →
+   parity-verify → `@governance` review → write `validation.sql` + `EXPLANATION.md` + `parity.md`.
+   Everything lands in `flows/<plan>/<flow>/`.
+5. **Validate yourself** — read the governance report and `parity.md`, then **run
+   `validation.sql`** to confirm new matches legacy. The parity audit must be green.
+6. **Sign off** — when satisfied, run **`/dp:signoff <flow>`**: you attest you independently
+   validated it, and the flow's status advances to **Productionized**. Status changes are
+   gated — Gemini won't promote on its own.
+7. **Commit** — `git commit` (one flow per commit). The status tracker updates.
+8. **Push / pull request (or merge request)** — when a GitHub or GitLab remote exists. Until
    then, just commit locally.
-8. Back to step 2 for the next flow.
+9. Back to step 2 for the next flow.
 
-Never start a second flow until the current one is verified and committed.
+Never start a second flow until the current one is verified, signed off, and committed.
 
 ## Where it lives
 
 - **Version control: git.** It works with or without a server.
   - **No remote yet?** `git init` here and commit — you get full history and rollback today,
     on one machine. When a **GitHub or GitLab** remote is ready: `git remote add origin <url>`
-    then `git push`. The history comes along and CI/Pages turn on. Zero rework — the repo
-    already ships both a GitHub Actions workflow (`.github/workflows/pages.yml`) and a GitLab
-    CI file (`.gitlab-ci.yml`); whichever host you pick activates, the other stays dormant.
+    then `git push`. The history comes along. Zero rework.
   - **Do NOT** put this repo inside a OneDrive/SharePoint-synced folder — syncing `.git`
     corrupts it. Keep git as the project's home; share read-only artifacts separately.
-- **Sharing read-only artifacts** (the dashboard, reports) before a remote exists: drop the
-  generated files in SharePoint/Teams, or serve locally (below). People *consume* these; they
-  don't edit them.
 
-## Viewing the flow catalog
+## Viewing the status tracker
 
-- **Hosted (preferred):** GitHub Pages or GitLab Pages serves `docs/catalog.html` automatically
-  once the repo is on that host with Pages enabled — open the URL. (`catalog.json` is regenerated
-  by the toolkit; CI only publishes it.)
-- **Locally, before hosting:** the dashboard reads `docs/catalog.json`, which browsers block when
-  you double-click the HTML. So from `docs/` run `python -m http.server`, then open
-  `http://localhost:8000/catalog.html`.
+Open **`status/migration_status.xlsx`** in Excel (or `status/migration_status.csv` in any
+viewer). It's a plain file the toolkit updates — no server, no hosting.
 
 ## Keeping the workspace clean
 
-- Everything has a home: SQL → `definitions/<plan>/<flow>/`, Python → `python/<plan>/<flow>/`,
-  docs → `docs/` + `plans/<plan>/`, parity evidence → `output/parity/<plan>/<flow>.md`. Recipe
-  inputs → `context/<plan>/<flow>/` (read-only).
-- Scratch/throwaway → `output/temp/` only.
-- Nothing at the repo root that isn't already here. `.gitignore` keeps secrets, raw exports,
-  and temp out of git — check `git status` before committing so nothing unexpected slips in.
+- **One folder per flow:** everything for a flow lives in `flows/<plan>/<flow>/` — `<flow>.sql`
+  (primary), optional `<flow>.sqlx`, `validation.sql`, `EXPLANATION.md`, `parity.md`, and the
+  read-only `recipe/`. Plan map → `flows/<plan>/README.md`. Cross-flow status tracking → `status/`.
+- Nothing at the repo root that isn't already here. `.gitignore` keeps secrets, raw exports
+  (`recipe/`), and temp out of git — check `git status` before committing so nothing unexpected
+  slips in.
 
 ## Credentials — never commit them
 

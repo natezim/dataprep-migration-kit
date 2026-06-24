@@ -103,7 +103,7 @@ SPEAKER NOTES: We migrate Plans, not just flows — otherwise we'd keep the logi
 Slide 12 — Maintainability, Docs & Tracking
 - Folders mirror Dataprep: Plan → flow; one self-describing folder per flow (model + README + parity)
 - Every artifact has a plain-English header + one commented block per original step
-- Generated, drift-proof docs: an HTML+JSON catalog dashboard, per-Plan and per-flow READMEs
+- Generated, drift-proof docs: an HTML+JSON status tracker (CSV/Excel), per-Plan and per-flow READMEs
 - Version-controlled in Git; catalog auto-published to Pages on every change
 SPEAKER NOTES: Docs are generated from the same metadata the code uses, so they can't drift. The catalog is the team's "what do we have and what's its status" view, hosted, not a file passed around.
 

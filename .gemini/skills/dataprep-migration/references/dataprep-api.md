@@ -87,7 +87,7 @@ Aggregate per flow:
 
 - **MAX_PATH (260):** deep JSON5 package trees + long flow names overflow the path limit and cause
   silent extraction failures. **Sanitize extracted folder names to ≤60 chars and drop flow-ID
-  suffixes** before unzipping into `context/`.
+  suffixes** before unzipping into `flows/<plan>/<flow>/recipe/`.
   ```python
   def get_clean_folder_name(name):
       s = re.sub(r'[^a-zA-Z0-9_\-\.]', '_', name)
@@ -99,9 +99,9 @@ Aggregate per flow:
   back to an alternate filename so discovery never halts:
   ```python
   try:
-      writer.save()                 # primary
+      writer.save()                 # primary: status/migration_status.xlsx (or catalog .xlsx)
   except PermissionError:
-      writer.save("output/data/catalog_database_ready.xlsx")   # fallback
+      writer.save("status/catalog_database_ready.xlsx")   # fallback
   ```
 
 ## Discovery script sequence (read-only)
@@ -110,11 +110,11 @@ The end-to-end discovery run, in order:
 
 1. **Sweep** — `GET /v4/flows?limit=250&flowsFilter=all`; save live flow metadata to JSON.
 2. **Download + unzip** — read that JSON, compute clean folder names (no flow IDs), download each
-   `GET /v4/flows/{id}/package` ZIP, extract to `context/<plan>/<clean_name>/`.
+   `GET /v4/flows/{id}/package` ZIP, extract to `flows/<plan>/<clean_name>/recipe/`.
 3. **Analyze** — parse each package `.json5` for recipe step counts and transform verbs.
 4. **Job stats** — bulk-fetch up to ~3000 jobs with `embed=creator`; compute durations, runner
    names/emails per flow.
 5. **Plan stats** — read `latestPlanSnapshotRun` from `GET /v4/plans?limit=250&plansFilter=all`
    for active/stale plan run-state. (`/v4/planSnapshotRuns` is only an optional, fragile fallback.)
-6. **Compile** — merge flows + plans + job stats into the backlog, `docs/catalog.json`, and the
-   styled catalog spreadsheet.
+6. **Compile** — merge flows + plans + job stats into `status/`: `status/backlog.md`,
+   `status/migration_status.csv`, `status/migration_status.xlsx`, and `status/migration_status.csv`.
