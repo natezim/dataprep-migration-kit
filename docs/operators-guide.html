@@ -1,0 +1,1182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dataprep → BigQuery Migration Kit — Operator's Guide</title>
+<style>
+  /* ============================================================
+     THEME TOKENS
+     ============================================================ */
+  :root {
+    /* Key Red — single brand accent */
+    --accent: #c8102e;
+    --accent-soft: #fbe9ec;
+    --accent-deep: #9e0c24;
+    /* Semantic only — used solely for real status, never decoration */
+    --ok: #15803d;
+    --ok-soft: #e7f2ea;
+    --warn: #b45309;
+    --warn-soft: #f7edda;
+    --danger: #b91c1c;
+    --danger-soft: #f8e4e4;
+    /* Demoted to neutral slate so the UI reads professional, not playful */
+    --violet: #475569;
+    --violet-soft: #eef1f5;
+    --teal: #5b6776;
+    --teal-soft: #eef1f4;
+
+    --bg: #f6f7f9;
+    --surface: #ffffff;
+    --surface-2: #fafbfc;
+    --border: #e4e6ea;
+    --border-strong: #d2d6dd;
+    --text: #17191d;
+    --text-soft: #565d68;
+    --text-faint: #888e99;
+    --code-bg: #f3f4f6;
+    --code-text: #1f2733;
+    --shadow-sm: 0 1px 2px rgba(16,24,40,.04), 0 1px 2px rgba(16,24,40,.05);
+    --shadow-md: 0 2px 8px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.05);
+    --shadow-lg: 0 10px 28px rgba(16,24,40,.09);
+    --radius: 10px;
+    --radius-sm: 7px;
+    --mono: "SFMono-Regular", "JetBrains Mono", "Cascadia Code", Consolas, "Liberation Mono", Menlo, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --sidebar-w: 290px;
+  }
+  html[data-theme="dark"] {
+    --accent: #f4516a;
+    --accent-soft: #3a161c;
+    --accent-deep: #ff8493;
+    --ok: #4ade80;
+    --ok-soft: #15301f;
+    --warn: #e0a430;
+    --warn-soft: #352808;
+    --danger: #f87171;
+    --danger-soft: #3a1717;
+    --violet: #94a3b8;
+    --violet-soft: #232a34;
+    --teal: #8b97a6;
+    --teal-soft: #232a34;
+
+    --bg: #0e1014;
+    --surface: #15181e;
+    --surface-2: #1a1e25;
+    --border: #262b33;
+    --border-strong: #353c46;
+    --text: #e7eaf0;
+    --text-soft: #a3abb9;
+    --text-faint: #6c7585;
+    --code-bg: #1c2027;
+    --code-text: #d7dce5;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,.3);
+    --shadow-md: 0 4px 14px rgba(0,0,0,.4);
+    --shadow-lg: 0 14px 36px rgba(0,0,0,.5);
+  }
+
+  /* ============================================================
+     BASE
+     ============================================================ */
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    font-size: 15.5px;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, .mono { font-family: var(--mono); }
+  :not(pre) > code {
+    background: var(--code-bg);
+    color: var(--code-text);
+    padding: .12em .42em;
+    border-radius: 6px;
+    font-size: .86em;
+    border: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  h1, h2, h3, h4 { line-height: 1.25; color: var(--text); }
+
+  /* ============================================================
+     LAYOUT
+     ============================================================ */
+  .shell { display: flex; min-height: 100vh; }
+
+  /* Sidebar */
+  .sidebar {
+    width: var(--sidebar-w);
+    flex: 0 0 var(--sidebar-w);
+    position: sticky;
+    top: 0;
+    align-self: flex-start;
+    height: 100vh;
+    overflow-y: auto;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 22px 16px 40px;
+    z-index: 40;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 11px;
+    padding: 4px 8px 16px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .brand-mark {
+    width: 38px; height: 38px; flex: 0 0 38px;
+    border-radius: 8px;
+    background: var(--accent);
+    display: grid; place-items: center;
+  }
+  .brand-text strong { font-size: 14.5px; display: block; letter-spacing: -.01em; }
+  .brand-text span { font-size: 11.5px; color: var(--text-faint); }
+
+  .search-wrap { position: relative; margin: 4px 6px 14px; }
+  .search-wrap svg { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--text-faint); }
+  #navSearch {
+    width: 100%;
+    padding: 9px 12px 9px 34px;
+    border: 1px solid var(--border-strong);
+    border-radius: 9px;
+    background: var(--surface-2);
+    color: var(--text);
+    font-size: 13.5px;
+    font-family: var(--sans);
+    outline: none;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  #navSearch:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+  .nav { list-style: none; margin: 0; padding: 0; }
+  .nav li a {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px;
+    border-radius: 9px;
+    color: var(--text-soft);
+    font-size: 13.7px;
+    font-weight: 500;
+    transition: background .14s, color .14s;
+  }
+  .nav li a:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
+  .nav li a.active { background: var(--accent-soft); color: var(--accent-deep); font-weight: 600; }
+  .nav .num {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-faint);
+    min-width: 18px;
+    text-align: right;
+  }
+  .nav li a.active .num { color: var(--accent); }
+  .nav-empty { padding: 16px 12px; color: var(--text-faint); font-size: 13px; display: none; }
+
+  .sidebar-foot {
+    margin-top: 22px; padding: 14px 12px 0;
+    border-top: 1px solid var(--border);
+    font-size: 11.5px; color: var(--text-faint);
+  }
+
+  /* Main */
+  .main { flex: 1 1 auto; min-width: 0; }
+  .topbar {
+    position: sticky; top: 0; z-index: 30;
+    display: flex; align-items: center; gap: 14px;
+    padding: 12px 28px;
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+  .menu-btn {
+    display: none;
+    background: var(--surface); border: 1px solid var(--border-strong);
+    border-radius: 9px; padding: 7px 9px; cursor: pointer; color: var(--text);
+  }
+  .topbar .crumb { font-size: 13px; color: var(--text-faint); flex: 1 1 auto; }
+  .topbar .crumb b { color: var(--text-soft); font-weight: 600; }
+  .theme-toggle {
+    background: var(--surface); border: 1px solid var(--border-strong);
+    border-radius: 9px; padding: 7px 12px; cursor: pointer;
+    color: var(--text-soft); font-size: 13px; display: flex; align-items: center; gap: 7px;
+    transition: border-color .15s, color .15s;
+  }
+  .theme-toggle:hover { border-color: var(--accent); color: var(--text); }
+
+  .content { max-width: 980px; margin: 0 auto; padding: 30px 28px 90px; }
+
+  section.doc { scroll-margin-top: 76px; margin-bottom: 14px; }
+  .sec-head { display: flex; align-items: baseline; gap: 12px; margin: 40px 0 6px; }
+  .sec-head .kicker {
+    font-family: var(--mono); font-size: 12px; font-weight: 600;
+    color: var(--accent); background: var(--accent-soft);
+    padding: 3px 9px; border-radius: 7px; letter-spacing: .02em;
+  }
+  .sec-head h2 { font-size: 25px; margin: 0; letter-spacing: -.02em; }
+  .sec-sub { color: var(--text-soft); margin: 2px 0 22px; font-size: 15px; max-width: 70ch; }
+
+  /* ============================================================
+     CARDS / PANELS
+     ============================================================ */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 22px;
+    box-shadow: var(--shadow-sm);
+  }
+  .grid { display: grid; gap: 16px; }
+  .grid-2 { grid-template-columns: repeat(2, 1fr); }
+  .grid-3 { grid-template-columns: repeat(3, 1fr); }
+  @media (max-width: 820px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+  /* Pills / badges */
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 11px; border-radius: 999px;
+    font-size: 12.5px; font-weight: 600; line-height: 1;
+    border: 1px solid transparent; white-space: nowrap;
+  }
+  .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .pill-accent { background: var(--accent-soft); color: var(--accent-deep); }
+  .pill-ok { background: var(--ok-soft); color: var(--ok); }
+  .pill-warn { background: var(--warn-soft); color: var(--warn); }
+  .pill-danger { background: var(--danger-soft); color: var(--danger); }
+  .pill-violet { background: var(--violet-soft); color: var(--violet); }
+  .pill-teal { background: var(--teal-soft); color: var(--teal); }
+  .pill-muted { background: var(--code-bg); color: var(--text-soft); border-color: var(--border); }
+  .pill-ro { background: var(--code-bg); color: var(--text-soft); border-color: var(--border-strong); }
+
+  /* Hero */
+  .hero {
+    position: relative; overflow: hidden;
+    border-radius: 12px;
+    padding: 38px 36px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: 3px solid var(--accent);
+    box-shadow: var(--shadow-sm);
+  }
+  .hero h1 { font-size: 38px; margin: 14px 0 8px; letter-spacing: -.03em; line-height: 1.1; }
+  .hero .tagline { font-size: 17.5px; color: var(--text-soft); max-width: 64ch; margin: 0 0 22px; }
+  .hero-pills { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; }
+  .stat {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 12px; padding: 11px 15px;
+  }
+  .stat .big { font-weight: 700; font-size: 14.5px; letter-spacing: -.01em; }
+  .stat svg { color: var(--accent); flex: 0 0 auto; }
+
+  .insight {
+    margin-top: 26px;
+    border-radius: 10px;
+    padding: 22px 24px;
+    background: var(--accent-soft);
+    border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+    border-left: 3px solid var(--accent);
+  }
+  .insight .lbl {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--accent-deep); margin-bottom: 8px;
+  }
+  .insight p { margin: 0; font-size: 16px; }
+  .insight .eq {
+    display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    margin-top: 14px; font-family: var(--mono); font-size: 13.5px;
+  }
+  .insight .eq span {
+    background: var(--surface); border: 1px solid var(--border-strong);
+    padding: 5px 10px; border-radius: 8px;
+  }
+  .insight .eq .op { background: none; border: none; color: var(--text-faint); padding: 0 2px; }
+  .strike { text-decoration: line-through; color: var(--text-faint); }
+
+  /* ============================================================
+     PIPELINE FLOW DIAGRAM
+     ============================================================ */
+  .pipeline {
+    display: flex; align-items: stretch; gap: 0;
+    overflow-x: auto; padding: 6px 2px 14px;
+  }
+  .pstage {
+    flex: 1 0 150px; min-width: 150px;
+    position: relative;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 14px 14px 16px;
+    box-shadow: var(--shadow-sm);
+  }
+  .pstage:not(:last-child) { margin-right: 26px; }
+  .pstage:not(:last-child)::after {
+    content: ""; position: absolute; right: -26px; top: 50%; width: 26px; height: 2px;
+    background: linear-gradient(90deg, var(--border-strong), var(--accent));
+  }
+  .pstage:not(:last-child)::before {
+    content: ""; position: absolute; right: -8px; top: 50%; transform: translateY(-50%);
+    width: 0; height: 0; border-left: 8px solid var(--accent);
+    border-top: 5px solid transparent; border-bottom: 5px solid transparent; z-index: 2;
+  }
+  .pstage .pnum {
+    width: 24px; height: 24px; border-radius: 7px;
+    background: var(--accent-soft); color: var(--accent-deep);
+    font-family: var(--mono); font-size: 12px; font-weight: 700;
+    display: grid; place-items: center; margin-bottom: 9px;
+  }
+  .pstage h4 { margin: 0 0 5px; font-size: 14px; letter-spacing: -.01em; }
+  .pstage p { margin: 0; font-size: 12px; color: var(--text-soft); line-height: 1.45; }
+  .pstage.ro .pnum { background: var(--teal-soft); color: var(--teal); }
+
+  /* ============================================================
+     STATUS STEPPER
+     ============================================================ */
+  .stepper { display: flex; flex-wrap: wrap; gap: 0; margin: 6px 0 18px; }
+  .step {
+    flex: 1 1 0; min-width: 130px; position: relative;
+    text-align: center; padding: 0 6px;
+  }
+  .step .bar {
+    height: 8px; border-radius: 999px; margin-bottom: 12px;
+    background: var(--c, var(--accent));
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,.04);
+  }
+  .step .sname { font-weight: 600; font-size: 13.5px; }
+  .step .sdesc { font-size: 11.5px; color: var(--text-faint); margin-top: 2px; }
+  .step .scount { font-family: var(--mono); font-size: 11px; color: var(--text-soft); }
+
+  /* ============================================================
+     COMMAND / AGENT / SKILL CARDS
+     ============================================================ */
+  .cmd-card, .agent-card { display: flex; flex-direction: column; }
+  .cmd-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+  .cmd-name {
+    font-family: var(--mono); font-size: 14.5px; font-weight: 700;
+    color: var(--accent-deep);
+    background: var(--accent-soft); padding: 5px 11px; border-radius: 8px;
+  }
+  .agent-card .cmd-name { color: var(--violet); background: var(--violet-soft); }
+  .cmd-tag { font-size: 12px; color: var(--text-faint); font-weight: 600; }
+  .cmd-body { font-size: 14px; color: var(--text-soft); margin: 6px 0 0; }
+  .cmd-body b { color: var(--text); }
+  .meta-row {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px;
+    padding-top: 13px; border-top: 1px dashed var(--border-strong);
+  }
+
+  .skill-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 10px; }
+  @media (max-width: 820px){ .skill-grid { grid-template-columns: 1fr; } }
+  .ref {
+    display: flex; gap: 12px; align-items: flex-start;
+    padding: 13px 15px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 11px;
+  }
+  .ref .rname { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--text); }
+  .ref .rdesc { font-size: 12.5px; color: var(--text-soft); margin-top: 2px; }
+  .ref .ricon { color: var(--accent); flex: 0 0 auto; margin-top: 2px; }
+
+  /* ============================================================
+     COLLAPSIBLES
+     ============================================================ */
+  details.collapse {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; margin: 12px 0; overflow: hidden;
+    box-shadow: var(--shadow-sm);
+  }
+  details.collapse > summary {
+    cursor: pointer; list-style: none; padding: 15px 20px;
+    display: flex; align-items: center; gap: 12px; font-weight: 600; font-size: 15px;
+    user-select: none;
+  }
+  details.collapse > summary::-webkit-details-marker { display: none; }
+  details.collapse > summary .chev {
+    margin-left: auto; transition: transform .2s; color: var(--text-faint);
+  }
+  details.collapse[open] > summary .chev { transform: rotate(90deg); }
+  details.collapse > summary:hover { background: var(--surface-2); }
+  details.collapse .collapse-body { padding: 4px 20px 20px; border-top: 1px solid var(--border); }
+  .sum-ico {
+    width: 28px; height: 28px; flex: 0 0 28px; border-radius: 8px;
+    background: var(--accent-soft); color: var(--accent-deep);
+    display: grid; place-items: center;
+  }
+
+  /* ============================================================
+     CODE BLOCKS
+     ============================================================ */
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 11px;
+    padding: 15px 17px;
+    overflow-x: auto;
+    font-size: 12.8px;
+    line-height: 1.6;
+    margin: 14px 0;
+  }
+  pre code { font-family: var(--mono); color: var(--code-text); white-space: pre; }
+  .c-com { color: var(--text-faint); font-style: italic; }
+  .c-key { color: var(--violet); font-weight: 600; }
+  .c-fn  { color: var(--accent); }
+  .c-str { color: var(--ok); }
+
+  /* File tree */
+  .tree {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px 20px; font-family: var(--mono); font-size: 13px; line-height: 1.85;
+    box-shadow: var(--shadow-sm); overflow-x: auto;
+  }
+  .tree .dir { color: var(--accent); font-weight: 600; }
+  .tree .prim { color: var(--text); font-weight: 600; }
+  .tree .cmt { color: var(--text-faint); font-style: italic; }
+  .tree .tag {
+    font-family: var(--sans); font-size: 10.5px; font-weight: 600;
+    padding: 1px 7px; border-radius: 6px; margin-left: 4px; vertical-align: 1px;
+  }
+
+  /* Callouts */
+  .callout {
+    display: flex; gap: 13px; align-items: flex-start;
+    border-radius: 12px; padding: 15px 18px; margin: 14px 0;
+    border: 1px solid var(--border); background: var(--surface-2);
+  }
+  .callout .ci { flex: 0 0 auto; margin-top: 1px; }
+  .callout p { margin: 0; font-size: 13.8px; }
+  .callout.tip { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 24%, var(--border)); }
+  .callout.tip .ci { color: var(--accent); }
+  .callout.good { background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 24%, var(--border)); }
+  .callout.good .ci { color: var(--ok); }
+  .callout.warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 28%, var(--border)); }
+  .callout.warn .ci { color: var(--warn); }
+
+  /* Plain-English explainer — sits under the technical description */
+  .plain {
+    margin-top: 12px;
+    padding: 11px 13px 12px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--text-soft);
+    line-height: 1.55;
+  }
+  .plain .pl-lbl {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--accent-deep); margin-right: 7px;
+  }
+  .plain.compact { font-size: 12.6px; padding: 9px 11px; }
+
+  /* Safety panel rows */
+  .safe-row {
+    display: flex; gap: 14px; align-items: flex-start;
+    padding: 15px 0; border-bottom: 1px solid var(--border);
+  }
+  .safe-row:last-child { border-bottom: none; }
+  .safe-ico {
+    width: 36px; height: 36px; flex: 0 0 36px; border-radius: 10px;
+    display: grid; place-items: center; background: var(--ok-soft); color: var(--ok);
+  }
+  .safe-row h4 { margin: 0 0 3px; font-size: 14.5px; }
+  .safe-row p { margin: 0; font-size: 13.5px; color: var(--text-soft); }
+
+  /* Diff tiers */
+  .tier {
+    display: flex; align-items: center; gap: 14px;
+    padding: 13px 16px; border-radius: 11px; border: 1px solid var(--border);
+    background: var(--surface); margin-bottom: 10px; box-shadow: var(--shadow-sm);
+  }
+  .tier .tnum {
+    width: 30px; height: 30px; flex: 0 0 30px; border-radius: 8px;
+    font-family: var(--mono); font-weight: 700; font-size: 13px;
+    display: grid; place-items: center; color: #fff;
+  }
+  .tier h4 { margin: 0; font-size: 14.5px; }
+  .tier p { margin: 1px 0 0; font-size: 13px; color: var(--text-soft); }
+  .tier .esc { margin-left: auto; color: var(--text-faint); font-size: 11px; font-family: var(--mono); white-space: nowrap; }
+
+  /* Fix cards */
+  .fix-card { border-left: 4px solid var(--warn); }
+  .fix-card h4 { margin: 0 0 6px; font-size: 14.5px; display: flex; align-items: center; gap: 8px; }
+  .fix-card .lane { font-family: var(--mono); font-size: 11px; color: var(--warn); font-weight: 700; text-transform: uppercase; }
+  .fix-card p { margin: 0; font-size: 13.3px; color: var(--text-soft); }
+
+  /* Discovery scripts */
+  .scripts { display: flex; flex-direction: column; gap: 0; }
+  .script-row { display: flex; align-items: center; gap: 14px; padding: 6px 0; }
+  .script-row .sidx {
+    width: 30px; height: 30px; flex: 0 0 30px; border-radius: 8px;
+    background: var(--accent-soft); color: var(--accent-deep);
+    font-family: var(--mono); font-weight: 700; font-size: 12px;
+    display: grid; place-items: center;
+  }
+  .script-row .sfile { font-family: var(--mono); font-size: 13.5px; font-weight: 600; }
+  .script-row .sdesc { font-size: 13px; color: var(--text-soft); }
+  .script-arrow { padding-left: 14px; color: var(--text-faint); }
+
+  /* Generic table */
+  table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; margin: 10px 0; }
+  table.tbl th, table.tbl td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); }
+  table.tbl th { font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-faint); }
+  table.tbl td code { font-size: .82em; }
+
+  /* Footer */
+  .footer {
+    margin-top: 50px; padding-top: 24px; border-top: 1px solid var(--border);
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
+    color: var(--text-faint); font-size: 13px;
+  }
+  .footer .ver {
+    font-family: var(--mono); font-size: 12px; background: var(--code-bg);
+    padding: 4px 10px; border-radius: 7px; border: 1px solid var(--border);
+  }
+
+  /* Section hide when filtered */
+  section.doc.filtered-out { display: none; }
+
+  /* Scrollbar */
+  .sidebar::-webkit-scrollbar, pre::-webkit-scrollbar, .pipeline::-webkit-scrollbar { height: 8px; width: 8px; }
+  .sidebar::-webkit-scrollbar-thumb, pre::-webkit-scrollbar-thumb, .pipeline::-webkit-scrollbar-thumb {
+    background: var(--border-strong); border-radius: 8px;
+  }
+
+  /* ============================================================
+     RESPONSIVE
+     ============================================================ */
+  @media (max-width: 980px) {
+    .sidebar {
+      position: fixed; left: 0; top: 0; transform: translateX(-100%);
+      transition: transform .24s ease; box-shadow: var(--shadow-lg);
+    }
+    .sidebar.open { transform: translateX(0); }
+    .menu-btn { display: inline-flex; }
+    .overlay {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 35;
+    }
+    .overlay.show { display: block; }
+  }
+  @media (max-width: 560px) {
+    .content { padding: 22px 16px 70px; }
+    .hero { padding: 28px 22px; }
+    .hero h1 { font-size: 29px; }
+  }
+</style>
+</head>
+<body>
+<div class="overlay" id="overlay"></div>
+<div class="shell">
+
+  <!-- ===================== SIDEBAR ===================== -->
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3Z"/>
+          <path d="M4 7v5c0 1.7 3.6 3 8 3s8-1.3 8-3V7"/>
+          <path d="M4 12v5c0 1.7 3.6 3 8 3s8-1.3 8-3v-5"/>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <strong>Migration Kit</strong>
+        <span>Operator's Guide</span>
+      </div>
+    </div>
+
+    <div class="search-wrap">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="navSearch" type="text" placeholder="Filter sections…" autocomplete="off" spellcheck="false">
+    </div>
+
+    <ul class="nav" id="nav">
+      <li><a href="#overview"><span class="num">01</span> Overview</a></li>
+      <li><a href="#pipeline"><span class="num">02</span> How It Works</a></li>
+      <li><a href="#lifecycle"><span class="num">03</span> Status Lifecycle</a></li>
+      <li><a href="#commands"><span class="num">04</span> Commands</a></li>
+      <li><a href="#agents"><span class="num">05</span> Agents</a></li>
+      <li><a href="#skill"><span class="num">06</span> Skill &amp; References</a></li>
+      <li><a href="#output"><span class="num">07</span> Output Standards</a></li>
+      <li><a href="#verify"><span class="num">08</span> Verification Engine</a></li>
+      <li><a href="#safety"><span class="num">09</span> Safety &amp; Access</a></li>
+      <li><a href="#folders"><span class="num">10</span> Folder Structure</a></li>
+      <li><a href="#discovery"><span class="num">11</span> Discovery Scripts</a></li>
+      <li><a href="#governance"><span class="num">12</span> Governance</a></li>
+    </ul>
+    <div class="nav-empty" id="navEmpty">No sections match.</div>
+
+    <div class="sidebar-foot">
+      Internal tool · read-only by design.<br>The repo is the source of truth.
+    </div>
+  </aside>
+
+  <!-- ===================== MAIN ===================== -->
+  <div class="main">
+    <div class="topbar">
+      <button class="menu-btn" id="menuBtn" aria-label="Toggle navigation">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+      </button>
+      <div class="crumb"><b>Dataprep → BigQuery Migration Kit</b> &nbsp;·&nbsp; Operator's Guide</div>
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle dark mode">
+        <svg id="themeIcon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <span id="themeLabel">Dark</span>
+      </button>
+    </div>
+
+    <div class="content">
+
+      <!-- ============ 01 OVERVIEW / HERO ============ -->
+      <section class="doc" id="overview" data-title="Overview hero migration kit transpilation wrangle">
+        <div class="hero">
+          <span class="pill pill-accent"><span class="dot"></span> Internal Tool · v-placeholder</span>
+          <h1>Dataprep → BigQuery Migration Kit</h1>
+          <p class="tagline">AI-assisted, verifiable migration of Dataprep (Trifacta) flows into maintainable BigQuery SQL — <b>owned by your team, not the tool.</b></p>
+
+          <div class="hero-pills grid grid-3">
+            <div class="stat">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6M12 22v-6"/><circle cx="12" cy="12" r="3"/></svg>
+              <div><div class="big">1 flow at a time</div><div style="font-size:11.5px;color:var(--text-faint)">focused, reviewable units</div></div>
+            </div>
+            <div class="stat">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+              <div><div class="big">Exact-match parity</div><div style="font-size:11.5px;color:var(--text-faint)">proven, not assumed</div></div>
+            </div>
+            <div class="stat">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>
+              <div><div class="big">Production never touched</div><div style="font-size:11.5px;color:var(--text-faint)">read-only, one-directional</div></div>
+            </div>
+          </div>
+
+          <div class="insight">
+            <span class="lbl">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2Z"/></svg>
+              The core insight
+            </span>
+            <p>A Dataprep flow is a <b>“recipe”</b> of steps written in <b>Wrangle</b> — a finite, declarative DSL. Because the vocabulary is finite, migration is <b>transpilation</b> (apply a reviewed mapping), not a from-scratch rewrite. That is precisely why the output is consistent, predictable, and trustworthy.</p>
+            <div class="plain" style="background:var(--surface);margin-top:14px">
+              <span class="pl-lbl">In plain English</span>The old tool only understands a fixed, limited set of commands. So we built a dictionary that says <em>“this command becomes this SQL.”</em> Migrating a flow is just looking each command up in that dictionary and writing down the answer — not inventing new code from scratch. That's why two people get the same result, and why you can trust it.</div>
+            <div class="eq">
+              <span class="strike">from-scratch rewrite</span>
+              <span class="op">→</span>
+              <span style="color:var(--accent-deep);border-color:var(--accent)!important">Wrangle step</span>
+              <span class="op">↦</span>
+              <span style="color:var(--accent-deep);border-color:var(--accent)!important">reviewed mapping</span>
+              <span class="op">↦</span>
+              <span style="color:#fff;background:var(--accent)!important;border-color:var(--accent)!important">SQL CTE</span>
+            </div>
+          </div>
+        </div>
+
+        <details class="collapse" style="margin-top:20px">
+          <summary><span class="sum-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></span> New to these terms? Plain-English glossary <span class="chev"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m9 18 6-6-6-6"/></svg></span></summary>
+          <div class="collapse-body">
+            <table class="tbl">
+              <tbody>
+                <tr><td><b>Dataprep / Trifacta</b></td><td>The old point-and-click tool we're migrating <em>away</em> from. It cleans and reshapes data using visual steps.</td></tr>
+                <tr><td><b>Flow</b></td><td>One complete Dataprep job — reads some files, applies a list of steps, writes a result. We migrate one flow at a time.</td></tr>
+                <tr><td><b>Recipe</b></td><td>The ordered list of steps inside a flow — the actual instructions, like a cooking recipe.</td></tr>
+                <tr><td><b>Wrangle</b></td><td>The little language those steps are written in. It only has a fixed set of commands — which is what makes this migration reliable.</td></tr>
+                <tr><td><b>Transpilation</b></td><td>Translating code from one language to another, step-for-step. We're translating Wrangle → SQL, not rewriting from scratch.</td></tr>
+                <tr><td><b>BigQuery</b></td><td>Google's data warehouse — the new home for these jobs. It runs <b>SQL</b>.</td></tr>
+                <tr><td><b>SQL</b></td><td>The standard language for querying data. The migrated flows are plain, readable SQL your team can maintain.</td></tr>
+                <tr><td><b>CTE</b></td><td>“Common Table Expression” — a named, self-contained chunk of a SQL query. We make <em>one CTE per old step</em>, so the new code lines up with the old recipe.</td></tr>
+                <tr><td><b>Parity</b></td><td>Proof that the new output exactly matches the old output. “Parity green” = it matches.</td></tr>
+                <tr><td><b>Staging</b></td><td>A throwaway scratch area where we test runs. Nothing real or production is ever touched.</td></tr>
+                <tr><td><b>Dependency graph (DAG)</b></td><td>A map of what feeds into what, so we migrate things in the right order.</td></tr>
+                <tr><td><b>Sign-off</b></td><td>A person on your team checks the work and puts their name to it. Required before anything goes live.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </section>
+
+      <!-- ============ 02 PIPELINE ============ -->
+      <section class="doc" id="pipeline" data-title="how it works pipeline extract inventory translate compile dry-run parity audit document sign-off stages">
+        <div class="sec-head"><span class="kicker">02</span><h2>How It Works — The Per-Flow Pipeline</h2></div>
+        <p class="sec-sub">Every flow travels the same seven stages. Each stage produces an artifact the next stage consumes, so the path is repeatable and auditable end-to-end.</p>
+
+        <div class="pipeline">
+          <div class="pstage ro"><div class="pnum">1</div><h4>Extract</h4><p>Export the flow package (ZIP) via Dataprep API or UI.</p></div>
+          <div class="pstage ro"><div class="pnum">2</div><h4>Inventory</h4><p>Parse package → backlog, DAG, complexity, target.</p></div>
+          <div class="pstage"><div class="pnum">3</div><h4>Translate</h4><p>Transpile each Wrangle step → one commented CTE.</p></div>
+          <div class="pstage"><div class="pnum">4</div><h4>Compile / Dry-run</h4><p>Catch structure, syntax &amp; cost before running.</p></div>
+          <div class="pstage ro"><div class="pnum">5</div><h4>Parity audit</h4><p>Run into staging &amp; diff vs the legacy table.</p></div>
+          <div class="pstage"><div class="pnum">6</div><h4>Document</h4><p>Write the explanation + a runnable validation query.</p></div>
+          <div class="pstage"><div class="pnum">7</div><h4>Sign-off</h4><p>A human attests they independently validated it.</p></div>
+        </div>
+        <div style="display:flex;gap:10px;margin:6px 0 18px;flex-wrap:wrap">
+          <span class="pill pill-teal"><span class="dot"></span> teal stage = read-only</span>
+          <span class="pill pill-accent"><span class="dot"></span> blue stage = produces team-owned artifacts</span>
+        </div>
+
+        <div class="grid grid-2">
+          <div class="card"><div class="cmd-head"><span class="pill pill-teal">1 · Extract</span></div>
+            <p class="cmd-body">Export a flow package — a ZIP of <code>flow.json</code> + <code>recipes/</code> + <code>inputs/</code> + <code>outputs/</code> — via the Dataprep API (<code>GET /v4/flows/{id}/package</code>) or the UI <b>“Export Flow”</b> button. Both produce the identical ZIP.</p>
+            <div class="plain compact"><span class="pl-lbl">In plain English</span>We download a complete copy of the existing job — every rule it follows and every file it reads and writes — as a single zip. Like photographing a recipe so we can rebuild the dish in a new kitchen. We <b>only copy</b>; nothing in the old tool is changed.</div></div>
+          <div class="card"><div class="cmd-head"><span class="pill pill-teal">2 · Inventory</span></div>
+            <p class="cmd-body">Parse the package into a <b>backlog</b>, a <b>dependency graph</b>, a <b>complexity</b> estimate, and a <b>recommended target</b> for the migration.</p>
+            <div class="plain compact"><span class="pl-lbl">In plain English</span>We open the zip and take stock: what does this job actually do, what else does it depend on, how hard will it be, and where should it live in BigQuery? It's the “survey the work before quoting it” step — a to-do list and a map.</div></div>
+          <div class="card"><div class="cmd-head"><span class="pill pill-accent">3 · Translate</span></div>
+            <p class="cmd-body">Transpile each Wrangle step into <b>one commented SQL block</b> — a CTE — with the original step quoted inline above it.</p>
+            <div class="plain compact"><span class="pl-lbl">In plain English</span>We rewrite each step of the old recipe as the equivalent step in SQL, one at a time, keeping the original instruction written right above its replacement. Every old step has a known SQL equivalent — nothing is guessed.</div></div>
+          <div class="card"><div class="cmd-head"><span class="pill pill-accent">4 · Compile / Dry-run</span></div>
+            <p class="cmd-body">Catch structural, syntactic, and <b>cost</b> problems before a single byte is processed for real.</p>
+            <div class="plain compact"><span class="pl-lbl">In plain English</span>Before running anything for real, we ask BigQuery to check the SQL the way spell-check reads a document — does it make sense, will it run, and roughly what will it cost? Mistakes get caught here, for free, instead of after a slow, expensive run.</div></div>
+          <div class="card"><div class="cmd-head"><span class="pill pill-teal">5 · Parity audit</span></div>
+            <p class="cmd-body">Run into a <b>disposable staging dataset</b> and diff the result against the legacy table using the 4-tier engine (§08).</p>
+            <div class="plain compact"><span class="pl-lbl">In plain English</span>We run the new SQL in a throwaway sandbox and compare its output — row by row — against what the old job produces. This is the proof step: if the numbers don't match exactly, it isn't done. The sandbox cleans itself up afterward.</div></div>
+          <div class="card"><div class="cmd-head"><span class="pill pill-accent">6 · Document</span></div>
+            <p class="cmd-body">Write the plain-English explanation plus a <b>user-runnable validation query</b> so the team can check the work itself.</p>
+            <div class="plain compact"><span class="pl-lbl">In plain English</span>We write a short, jargon-free explanation of what the flow does and hand you a ready-made query you can run yourself to confirm the new results match the old ones — so you can verify and own it without us.</div></div>
+        </div>
+        <div class="card" style="margin-top:16px;border-color:color-mix(in srgb,var(--ok) 30%,var(--border))">
+          <div class="cmd-head"><span class="pill pill-ok">7 · Sign-off</span></div>
+          <p class="cmd-body">A human attests they <b>independently validated</b> the flow before it is marked <b>Productionized</b>. Nothing reaches production on the tool's say-so alone.</p>
+          <div class="plain compact" style="border-left-color:var(--ok)"><span class="pl-lbl" style="color:var(--ok)">In plain English</span>A person on your team actually runs the check, reads the SQL, and puts their name to it. Only then is it “live.” The tool never promotes its own work.</div>
+        </div>
+      </section>
+
+      <!-- ============ 03 LIFECYCLE ============ -->
+      <section class="doc" id="lifecycle" data-title="status lifecycle not started in process validating parallel runs productionized stepper gated">
+        <div class="sec-head"><span class="kicker">03</span><h2>Status Lifecycle</h2></div>
+        <p class="sec-sub">Every flow occupies exactly one status. Transitions move strictly left-to-right and are <b>gated</b> — Gemini asks you to confirm before advancing.</p>
+
+        <div class="stepper">
+          <div class="step"><div class="bar" style="--c:#9aa3b2"></div><div class="sname">Not started</div><div class="sdesc">in the backlog</div></div>
+          <div class="step"><div class="bar" style="--c:var(--accent)"></div><div class="sname">In process</div><div class="sdesc">actively migrating</div></div>
+          <div class="step"><div class="bar" style="--c:var(--violet)"></div><div class="sname">Validating</div><div class="sdesc">parity + review</div></div>
+          <div class="step"><div class="bar" style="--c:var(--warn)"></div><div class="sname">Parallel runs</div><div class="sdesc">old & new side-by-side</div></div>
+          <div class="step"><div class="bar" style="--c:var(--ok)"></div><div class="sname">Productionized</div><div class="sdesc">signed off</div></div>
+        </div>
+
+        <div class="grid grid-3" style="margin-bottom:6px">
+          <div class="card"><span class="pill" style="background:#eef0f3;color:#5b6776">● Not started</span>
+            <div class="plain compact" style="border-left-color:#9aa3b2"><span class="pl-lbl" style="color:#5b6776">Plain English</span>The job has been found and logged, but no one has started migrating it. It's waiting in the queue.</div></div>
+          <div class="card"><span class="pill pill-accent">● In process</span>
+            <div class="plain compact"><span class="pl-lbl">Plain English</span>Someone is actively rebuilding this job in SQL right now — translating, compiling, and checking it.</div></div>
+          <div class="card"><span class="pill" style="background:var(--violet-soft);color:var(--violet)">● Validating</span>
+            <div class="plain compact" style="border-left-color:var(--violet)"><span class="pl-lbl" style="color:var(--violet)">Plain English</span>The new SQL is built and is being compared against the old output to prove the numbers match, while a person reviews the code.</div></div>
+          <div class="card"><span class="pill pill-warn">● Parallel runs</span>
+            <div class="plain compact" style="border-left-color:var(--warn)"><span class="pl-lbl" style="color:var(--warn)">Plain English</span>For a while, the old job and the new SQL run side-by-side on the same schedule, so you can watch them agree on real, live data before retiring the old one.</div></div>
+          <div class="card"><span class="pill pill-ok">● Productionized</span>
+            <div class="plain compact" style="border-left-color:var(--ok)"><span class="pl-lbl" style="color:var(--ok)">Plain English</span>A human has signed off. The new SQL is now the official version, and the old Dataprep flow can be switched off.</div></div>
+        </div>
+
+        <div class="callout warn">
+          <span class="ci"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></span>
+          <p><b>Transitions are gated.</b> Status lives in <code>status/migration_status.csv</code> (with an Excel view) and is updated as flows progress. Gemini <b>asks you to confirm</b> before advancing any flow, and <b>“Productionized”</b> additionally requires the sign-off attestation (§04 · <code>/dp:signoff</code>).</p>
+        </div>
+      </section>
+
+      <!-- ============ 04 COMMANDS ============ -->
+      <section class="doc" id="commands" data-title="commands dp start migrate signoff golden path orient resume">
+        <div class="sec-head"><span class="kicker">04</span><h2>Commands</h2></div>
+        <p class="sec-sub">Three commands cover the entire operating loop: orient, migrate, sign off.</p>
+
+        <div class="grid">
+          <div class="card cmd-card">
+            <div class="cmd-head"><span class="cmd-name">/dp:start</span><span class="cmd-tag">orient &amp; resume</span></div>
+            <p class="cmd-body">Reads the status tracker, does <b>first-time setup</b> (API-optional), and helps you pick <b>ONE flow</b> to work on. Creates that flow's folder and its git branch.</p>
+            <div class="plain compact"><span class="pl-lbl">Plain English</span>Your “where was I?” button. Run it first — it shows what's done, what's left, helps you pick the next job, and sets up a clean workspace for it.</div>
+            <div class="meta-row">
+              <span class="pill pill-muted">reads status tracker</span>
+              <span class="pill pill-muted">first-time setup</span>
+              <span class="pill pill-muted">creates folder + branch</span>
+            </div>
+          </div>
+
+          <div class="card cmd-card">
+            <div class="cmd-head"><span class="cmd-name">/dp:migrate &lt;flow&gt;</span><span class="cmd-tag">the golden path</span></div>
+            <p class="cmd-body">The golden path for <b>ONE flow</b>: inventory → transpile → compile/dry-run → parity → document. Outputs land in <code>flows/&lt;plan&gt;/&lt;flow&gt;/</code>.</p>
+            <div class="plain compact"><span class="pl-lbl">Plain English</span>The “do the whole migration” button for one job. It runs every step in order — survey, translate, test, prove, document — and drops all the results in that job's folder for you to review.</div>
+            <div class="meta-row">
+              <span class="pill pill-accent">inventory</span><span class="pill pill-accent">transpile</span>
+              <span class="pill pill-accent">compile</span><span class="pill pill-accent">parity</span><span class="pill pill-accent">document</span>
+            </div>
+          </div>
+
+          <div class="card cmd-card" style="border-color:color-mix(in srgb,var(--ok) 30%,var(--border))">
+            <div class="cmd-head"><span class="cmd-name" style="color:var(--ok);background:var(--ok-soft)">/dp:signoff &lt;flow&gt;</span><span class="cmd-tag">human attestation</span></div>
+            <p class="cmd-body">You attest you <b>independently reviewed AND validated</b> the flow; status advances to <b>Productionized</b>, recording who + when. <b>No rubber-stamping.</b></p>
+            <div class="plain compact" style="border-left-color:var(--ok)"><span class="pl-lbl" style="color:var(--ok)">Plain English</span>The “I checked this myself and approve it” button. You run it only after you've personally reviewed the SQL and confirmed the results match. It records your name and the date.</div>
+            <div class="meta-row">
+              <span class="pill pill-ok">records who + when</span>
+              <span class="pill pill-ok">→ Productionized</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 05 AGENTS ============ -->
+      <section class="doc" id="agents" data-title="agents flow-inventory recipe-translator parity-auditor governance read-only">
+        <div class="sec-head"><span class="kicker">05</span><h2>Agents</h2></div>
+        <p class="sec-sub">The commands orchestrate four specialized agents. Several are strictly <b>read-only</b> on the systems they touch.</p>
+
+        <div class="grid grid-2">
+          <div class="card agent-card">
+            <div class="cmd-head"><span class="cmd-name">@flow-inventory</span><span class="pill pill-ro">read-only</span></div>
+            <p class="cmd-body">Turns a flow package into a <b>backlog</b>, a <b>dependency DAG</b>, a <b>complexity</b> estimate, a recommended <b>target</b>, and a <b>status entry</b>.</p>
+            <div class="plain compact"><span class="pl-lbl">Plain English</span>The surveyor. It reads the old job and writes up what it does, what it needs, and how big a task it'll be — without changing anything.</div>
+          </div>
+
+          <div class="card agent-card">
+            <div class="cmd-head"><span class="cmd-name">@recipe-translator</span></div>
+            <p class="cmd-body">Recipe → <b>ONE</b> commented, self-contained BigQuery SQL file (<b>one CTE per Wrangle step</b>, original step quoted). Also writes <code>validation.sql</code> + <code>EXPLANATION.md</code>. No hard-coded values; applies the three corruption fixes.</p>
+            <div class="plain compact"><span class="pl-lbl">Plain English</span>The translator. It turns the old recipe into clean, heavily-commented SQL, plus a plain-English write-up and a query you can run to check it yourself.</div>
+          </div>
+
+          <div class="card agent-card">
+            <div class="cmd-head"><span class="cmd-name">@parity-auditor</span><span class="pill pill-ro">read-only on legacy</span></div>
+            <p class="cmd-body">Freezes the input, runs the migrated code into <b>staging</b>, and performs the <b>4-tier diff</b> against the legacy result.</p>
+            <div class="plain compact"><span class="pl-lbl">Plain English</span>The proofreader. It runs the new code on the exact same frozen data the old job used and checks — old vs new — that every row matches.</div>
+          </div>
+
+          <div class="card agent-card">
+            <div class="cmd-head"><span class="cmd-name">@governance</span></div>
+            <p class="cmd-body">Runs a <b>readiness checklist</b> — no hardcoding, comments present, single self-contained file, parity green, <code>validation.sql</code> + <code>EXPLANATION.md</code> present, naming — producing a <b>governance report</b> that <b>gates sign-off</b>.</p>
+            <div class="plain compact"><span class="pl-lbl">Plain English</span>The inspector. It runs a quality checklist and won't let a job reach sign-off until every box is ticked. It checks; a human still approves.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 06 SKILL ============ -->
+      <section class="doc" id="skill" data-title="skill dataprep-migration references wrangle-to-sql python recipe-anatomy dataform parity-harness api windows onedrive output-standards governance transform dictionary">
+        <div class="sec-head"><span class="kicker">06</span><h2>The Skill &amp; Its References</h2></div>
+        <p class="sec-sub">One skill packages the method and a transform dictionary; ten reference files carry the detail.</p>
+
+        <div class="card" style="margin-bottom:16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+          <div class="sum-ico" style="width:40px;height:40px;flex:0 0 40px;background:var(--violet-soft);color:var(--violet)">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+          </div>
+          <div style="flex:1 1 260px">
+            <div style="font-family:var(--mono);font-weight:700;font-size:16px">skill: dataprep-migration</div>
+            <div style="color:var(--text-soft);font-size:13.5px">The method itself + a <b>transform dictionary</b> mapping Wrangle vocabulary to SQL.</div>
+          </div>
+        </div>
+
+        <div class="skill-grid">
+          <div class="ref"><span class="ricon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h10"/></svg></span><div><div class="rname">wrangle-to-sql</div><div class="rdesc">The core transform dictionary: each Wrangle step → its BigQuery SQL form.</div></div></div>
+          <div class="ref"><span class="ricon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h10"/></svg></span><div><div class="rname">wrangle-to-python</div><div class="rdesc">The Python lane mapping for steps that don't belong in SQL.</div></div></div>
+          <div class="ref"><span class="ricon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h10"/></svg></span><div><div class="rname">recipe-anatomy</div><div class="rdesc">How a Dataprep recipe / flow package is structured and parsed.</div></div></div>
+          <div class="ref"><span class="ricon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h10"/></svg></span><div><div class="rname">dataform-conventions</div><div class="rdesc">Naming + structure conventions for the optional Dataform wrapper.</div></div></div>
+          <div class="ref"><span class="ricon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h10"/></svg></span><div><div class="rname">python-lane</div><div class="rdesc">When and how to drop into Python instead of SQL.</div></div></div>
+          <div class="ref"><span class="ricon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h10"/></svg></span><div><div class="rname">parity-harness</div><div class="rdesc">The verification engine: freeze, run, and 4-tier diff.</div></div></div>
+          <div class="ref"><span class="ricon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h10"/></svg></span><div><div class="rname">dataprep-api</div><div class="rdesc">Read-only API endpoints for listing and exporting flows.</div></div></div>
+          <div class="ref"><span class="ricon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h10"/></svg></span><div><div class="rname">windows-onedrive</div><div class="rdesc">Path, naming, and sync gotchas on Windows / OneDrive.</div></div></div>
+          <div class="ref"><span class="ricon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h10"/></svg></span><div><div class="rname">output-standards</div><div class="rdesc">The Create-Execute-Clean pattern, commenting, and no-hardcoding rules.</div></div></div>
+          <div class="ref"><span class="ricon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h10"/></svg></span><div><div class="rname">governance</div><div class="rdesc">The readiness checklist and sign-off gating rules.</div></div></div>
+        </div>
+      </section>
+
+      <!-- ============ 07 OUTPUT STANDARDS ============ -->
+      <section class="doc" id="output" data-title="output standards sql-first create-execute-clean external tables EXT STG staging no hardcoded values declare current_date query parameters comments validation explanation">
+        <div class="sec-head"><span class="kicker">07</span><h2>Output Standards</h2></div>
+        <p class="sec-sub">Why the generated SQL is trustworthy <em>and</em> maintainable — these are the rules every flow's output obeys.</p>
+
+        <details class="collapse" open>
+          <summary><span class="sum-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m18 16 4-4-4-4M6 8l-4 4 4 4M14.5 4l-5 16"/></svg></span> SQL-first: one self-contained <code>.sql</code> per flow <span class="chev"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m9 18 6-6-6-6"/></svg></span></summary>
+          <div class="collapse-body">
+            <p>A single console-runnable <code>.sql</code> per flow using a <b>“Create-Execute-Clean”</b> pattern:</p>
+            <div class="pipeline" style="padding-bottom:6px">
+              <div class="pstage"><div class="pnum" style="background:var(--teal-soft);color:var(--teal)">A</div><h4>Mount</h4><p>GCS CSVs as external tables (<code>EXT_*</code>).</p></div>
+              <div class="pstage"><div class="pnum">B</div><h4>Transform</h4><p>A CTE graph, one CTE per Wrangle step.</p></div>
+              <div class="pstage"><div class="pnum" style="background:var(--ok-soft);color:var(--ok)">C</div><h4>Create</h4><p>The staging table (<code>STG_*</code>).</p></div>
+              <div class="pstage"><div class="pnum" style="background:var(--warn-soft);color:var(--warn)">D</div><h4>Clean</h4><p>Drop the externals so the schema stays pristine.</p></div>
+            </div>
+            <div class="callout tip"><span class="ci"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span><p>The Dataform <code>.sqlx</code> wrapper is <b>optional</b> — useful for orchestration, never required to run the migration.</p></div>
+          </div>
+        </details>
+
+        <details class="collapse">
+          <summary><span class="sum-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></span> NO hard-coded values <span class="chev"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m9 18 6-6-6-6"/></svg></span></summary>
+          <div class="collapse-body">
+            <p>Load/run dates and params become <code>DECLARE</code> vars, <code>CURRENT_DATE()</code>, or query parameters — this is <b>required for automation</b>. A value baked into a string can't be scheduled.</p>
+            <pre><code><span class="c-com">-- ✗ NOT this</span>
+<span class="c-key">WHERE</span> load_date = <span class="c-str">'2026-06-25'</span>
+
+<span class="c-com">-- ✓ This — parameterized, automatable</span>
+<span class="c-key">DECLARE</span> run_date <span class="c-key">DATE</span> <span class="c-key">DEFAULT</span> <span class="c-fn">CURRENT_DATE</span>();
+<span class="c-key">WHERE</span> load_date = run_date</code></pre>
+          </div>
+        </details>
+
+        <details class="collapse">
+          <summary><span class="sum-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span> Heavy commenting <span class="chev"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m9 18 6-6-6-6"/></svg></span></summary>
+          <div class="collapse-body">
+            <p>A <b>header block</b> on every file — <em>what / why / when / source / owner / parity result</em> — plus an inline comment on <b>every CTE</b>.</p>
+            <pre><code><span class="c-com">-- ============================================================
+-- WHAT:   Daily revenue rollup by region
+-- WHY:    Replaces Dataprep flow "rev_daily" (legacy)
+-- WHEN:   Scheduled daily 06:00 UTC
+-- SOURCE: gs://.../revenue/*.csv  →  STG_revenue_daily
+-- OWNER:  analytics-data@
+-- PARITY: EXACT MATCH — 4-tier, 2026-06-24
+-- ============================================================</span></code></pre>
+          </div>
+        </details>
+
+        <details class="collapse">
+          <summary><span class="sum-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span> Independent-validation artifacts <span class="chev"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m9 18 6-6-6-6"/></svg></span></summary>
+          <div class="collapse-body">
+            <p>Every flow also ships:</p>
+            <div class="grid grid-2">
+              <div class="ref"><span class="ricon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m18 16 4-4-4-4M6 8l-4 4 4 4"/></svg></span><div><div class="rname">validation.sql</div><div class="rdesc">A query <b>you run</b> to compare new vs legacy yourself.</div></div></div>
+              <div class="ref"><span class="ricon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span><div><div class="rname">EXPLANATION.md</div><div class="rdesc">A plain-English walkthrough of the migration.</div></div></div>
+            </div>
+            <p style="margin-top:12px">So the team <b>validates independently and owns</b> the result — not the tool.</p>
+          </div>
+        </details>
+      </section>
+
+      <!-- ============ 08 VERIFICATION ENGINE ============ -->
+      <section class="doc" id="verify" data-title="verification engine trust freeze input time-travel 4-tier diff schema row count md5 hash cell-level normalize corruption fixes temporal decimal null propagation">
+        <div class="sec-head"><span class="kicker">08</span><h2>The Verification Engine</h2></div>
+        <p class="sec-sub">This is the trust core. Parity isn't asserted — it's <b>proven</b> against a frozen input with an escalating, exact-match diff.</p>
+
+        <h3 style="font-size:16px;margin:24px 0 8px">Freeze the input</h3>
+        <div class="card" style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">
+          <div class="safe-ico" style="background:var(--accent-soft);color:var(--accent);width:44px;height:44px;flex:0 0 44px">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M2 12h20M5 5l14 14M19 5 5 19"/></svg>
+          </div>
+          <div style="flex:1 1 280px">
+            <p style="margin:0;font-size:14px;color:var(--text-soft)">Snapshot the source with <b>BigQuery time-travel</b> so the migrated code and the legacy Dataprep run see <b>identical input</b>. This kills false failures from data drift — any difference that remains is a real difference.</p>
+            <div class="plain compact"><span class="pl-lbl">In plain English</span>Live data changes constantly, so comparing today's new run against yesterday's old run would show fake differences. Instead we pin both runs to the <b>exact same frozen snapshot</b> of the source — like pausing a video so two people describe the same frame. Any difference left over is therefore real.</div>
+          </div>
+        </div>
+
+        <h3 style="font-size:16px;margin:26px 0 8px">4-tier diff — escalating</h3>
+        <div class="plain" style="margin:0 0 12px"><span class="pl-lbl">In plain English</span>We compare the old and new results in four passes, each stricter than the last: start cheap and broad, and only dig down to the slow, cell-by-cell comparison if something looks off. We stop the moment we've either proven they match or pinpointed exactly where they don't.</div>
+        <div class="tier"><div class="tnum" style="background:#94a3b8">1</div><div><h4>Schema</h4><p>Column names, types, and order line up.</p></div><span class="esc">cheapest →</span></div>
+        <div class="tier"><div class="tnum" style="background:#64748b">2</div><div><h4>Row count</h4><p>Same number of rows produced.</p></div><span class="esc">↓ escalate</span></div>
+        <div class="tier"><div class="tnum" style="background:var(--accent)">3</div><div><h4>MD5 row-hash</h4><p>Hash each row and compare the two <b>multisets</b> — catches any content difference regardless of order.</p></div><span class="esc">↓ escalate</span></div>
+        <div class="tier"><div class="tnum" style="background:var(--accent-deep)">4</div><div><h4>Cell-level</h4><p>Pinpoint the exact <b>key + column</b> that differ — so a failure is immediately actionable.</p></div><span class="esc">→ most precise</span></div>
+
+        <div class="callout tip" style="margin-top:16px">
+          <span class="ci"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M7 12h10M11 18h2"/></svg></span>
+          <p><b>Normalize known-legitimate differences first</b> — column order, float rounding, row order, timezone, surrogate keys — then the bar is <b>exact match</b>. Nothing legitimate is allowed to mask a real defect, and nothing cosmetic is allowed to fail the audit.</p>
+        </div>
+
+        <h3 style="font-size:16px;margin:28px 0 10px">The three silent-corruption fixes — always applied</h3>
+        <div class="grid grid-3">
+          <div class="card fix-card">
+            <span class="lane">a · Temporal</span>
+            <h4>Date-shift</h4>
+            <p>Dataprep dates are <b>timezone-naive strings</b>. Keep them tz-naive in SQL to avoid a silent date-shift across timezones.</p>
+            <div class="plain compact" style="border-left-color:var(--warn)"><span class="pl-lbl" style="color:var(--warn)">Plain English</span>The old tool stores dates as plain text with no timezone. If SQL “helpfully” assumes one, a date can jump a day. We keep dates timezone-free so they stay put.</div>
+          </div>
+          <div class="card fix-card">
+            <span class="lane">b · Decimal</span>
+            <h4>Precision cap</h4>
+            <p>Cap precision at <b>38</b>. Alteryx allows 50; BigQuery caps at 38 — overflowing it corrupts values silently.</p>
+            <div class="plain compact" style="border-left-color:var(--warn)"><span class="pl-lbl" style="color:var(--warn)">Plain English</span>The old tool allowed more digits than BigQuery does. Numbers that don't fit get silently mangled, so we trim them to a size BigQuery can hold exactly.</div>
+          </div>
+          <div class="card fix-card">
+            <span class="lane">c · Null propagation</span>
+            <h4>Coalesce first</h4>
+            <p><b>Coalesce before string concatenation.</b> Wrangle treats <code>null</code> == empty string; SQL-92 does not, so a null poisons the whole concat.</p>
+            <div class="plain compact" style="border-left-color:var(--warn)"><span class="pl-lbl" style="color:var(--warn)">Plain English</span>In the old tool a blank acts like empty text. In SQL, a blank “poisons” anything you glue it to — turning the whole result blank. We convert blanks to empty text <em>before</em> joining text together.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 09 SAFETY ============ -->
+      <section class="doc" id="safety" data-title="safety access model read-only dataprep production bigquery staging write-guard gcloud not required python oauth api-optional one-directional">
+        <div class="sec-head"><span class="kicker">09</span><h2>Safety &amp; Access Model</h2></div>
+        <p class="sec-sub">The toolkit is read-only by construction. Here is exactly what it can and cannot touch.</p>
+
+        <div class="card">
+          <div class="safe-row">
+            <div class="safe-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+            <div><h4>Dataprep is READ-ONLY</h4><p>The toolkit only <code>GET</code>s — list + export. It never creates, edits, deletes, or runs anything in Dataprep. Migration is strictly <b>one-directional</b>.</p></div>
+          </div>
+          <div class="safe-row">
+            <div class="safe-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg></div>
+            <div><h4>Production (BigQuery) is read-only</h4><p><b>SELECT-only</b> on source / legacy. Never DDL, never DML against production.</p></div>
+          </div>
+          <div class="safe-row">
+            <div class="safe-ico" style="background:var(--warn-soft);color:var(--warn)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></div>
+            <div><h4>All writes go to ONE disposable staging dataset</h4><p><code>dataprep_migration_staging</code> with a default table expiration, so it <b>self-cleans</b>. A <b>write-guard</b> refuses any non-staging write.</p></div>
+          </div>
+          <div class="safe-row">
+            <div class="safe-ico" style="background:var(--accent-soft);color:var(--accent)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2ZM2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg></div>
+            <div><h4>gcloud not required</h4><p>Use the <b>Python BigQuery client</b> with browser OAuth, or the BigQuery console / Dataform UI. No CLI install needed.</p></div>
+          </div>
+          <div class="safe-row">
+            <div class="safe-ico" style="background:var(--violet-soft);color:var(--violet)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 15l2 2 4-4"/></svg></div>
+            <div><h4>API-optional</h4><p>Business units without API access use the <b>UI export</b> — everything downstream is <b>identical</b>.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 10 FOLDERS ============ -->
+      <section class="doc" id="folders" data-title="folder structure file tree flows plan flow sql sqlx validation explanation parity governance recipe status scripts gemini docs canonical names one folder per flow">
+        <div class="sec-head"><span class="kicker">10</span><h2>Folder Structure</h2></div>
+        <p class="sec-sub">One folder per flow — everything about a flow lives together.</p>
+
+        <div class="tree">
+<span class="dir">flows/&lt;plan&gt;/&lt;flow&gt;/</span>
+│   <span class="prim">&lt;flow&gt;.sql</span>          <span class="tag" style="background:var(--accent-soft);color:var(--accent-deep)">primary</span>  <span class="cmt"># the console-runnable migration</span>
+│   &lt;flow&gt;.sqlx         <span class="tag" style="background:var(--code-bg);color:var(--text-soft)">optional</span> <span class="cmt"># Dataform orchestration wrapper</span>
+│   validation.sql      <span class="cmt"># a query YOU run: new vs legacy</span>
+│   EXPLANATION.md      <span class="cmt"># plain-English walkthrough</span>
+│   parity.md           <span class="cmt"># the 4-tier audit result</span>
+│   governance.md       <span class="cmt"># readiness report</span>
+│   <span class="dir">recipe/</span>             <span class="tag" style="background:var(--teal-soft);color:var(--teal)">read-only · gitignored</span> <span class="cmt"># exported input</span>
+│
+<span class="dir">status/</span>
+│   migration_status.csv   <span class="tag" style="background:var(--ok-soft);color:var(--ok)">source of truth</span>
+│   migration_status.xlsx  <span class="cmt"># Excel view</span>
+│   backlog.md
+│
+<span class="dir">scripts/</span>                  <span class="cmt"># discovery (read-only)</span>
+│   01_sweep.py · 02_download_unzip.py · 03_job_stats.py · 04_compile_catalog.py
+│
+<span class="dir">.gemini/</span>                  <span class="cmt"># agents · the skill · commands</span>
+│
+<span class="dir">docs/</span>                     <span class="cmt"># guides &amp; this manual</span>
+│
+GEMINI.md · README · SETUP · GUIDE · CONTRIBUTING · MAINTAINING   <span class="cmt"># at root</span>
+        </div>
+
+        <div class="callout good" style="margin-top:16px">
+          <span class="ci"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg></span>
+          <p><b>One folder per flow.</b> Folders are created by Gemini from <b>canonical names</b>, one at a time — never pre-created or hand-named.</p>
+        </div>
+      </section>
+
+      <!-- ============ 11 DISCOVERY ============ -->
+      <section class="doc" id="discovery" data-title="discovery scripts run order sweep download unzip job stats compile catalog limit 250 flowsFilter plansFilter windows-safe read-only">
+        <div class="sec-head"><span class="kicker">11</span><h2>Discovery Scripts</h2></div>
+        <p class="sec-sub">Four read-only scripts, run in order, build the picture before any migration begins.</p>
+
+        <div class="card scripts">
+          <div class="script-row"><span class="sidx">01</span><div><span class="sfile">01_sweep.py</span> &nbsp;<span class="sdesc">List all flows / plans (<code>limit=250</code> + <code>flowsFilter</code>/<code>plansFilter=all</code> so nothing truncates).</span></div></div>
+          <div class="script-arrow">↓</div>
+          <div class="script-row"><span class="sidx">02</span><div><span class="sfile">02_download_unzip.py</span> &nbsp;<span class="sdesc">Export packages → <code>flows/&lt;plan&gt;/&lt;flow&gt;/recipe/</code>, with Windows-safe names.</span></div></div>
+          <div class="script-arrow">↓</div>
+          <div class="script-row"><span class="sidx">03</span><div><span class="sfile">03_job_stats.py</span> &nbsp;<span class="sdesc">Pull job history → runs, durations, owners.</span></div></div>
+          <div class="script-arrow">↓</div>
+          <div class="script-row"><span class="sidx">04</span><div><span class="sfile">04_compile_catalog.py</span> &nbsp;<span class="sdesc">Build the status tracker; <b>preserves any status / sign-off you've already set</b>.</span></div></div>
+        </div>
+        <div style="margin-top:12px"><span class="pill pill-teal"><span class="dot"></span> All four are strictly READ-ONLY</span></div>
+      </section>
+
+      <!-- ============ 12 GOVERNANCE ============ -->
+      <section class="doc" id="governance" data-title="governance ownership philosophy team owns gemini assists productionized human validation query review sign-off hardening loop references">
+        <div class="sec-head"><span class="kicker">12</span><h2>Governance &amp; Ownership</h2></div>
+        <p class="sec-sub">The closing principle — and the reason this approach holds up.</p>
+
+        <div class="card" style="background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 22%,var(--border));border-left:3px solid var(--accent)">
+          <p style="font-size:17px;margin:0 0 10px;font-weight:600">The team owns the migration; Gemini assists.</p>
+          <p style="margin:0;font-size:15px;color:var(--text-soft)">Nothing is <b>“Productionized”</b> on Gemini's say-so. A human runs the validation query, reviews the SQL, and signs off. <code>@governance</code> checks quality; <code>/dp:signoff</code> records the human attestation.</p>
+        </div>
+
+        <div class="grid grid-2" style="margin-top:16px">
+          <div class="card">
+            <div class="cmd-head"><span class="pill pill-violet">quality gate</span></div>
+            <p class="cmd-body"><code>@governance</code> runs the readiness checklist and produces a report — but it <b>gates</b>, it does not approve. A failing check blocks sign-off.</p>
+          </div>
+          <div class="card">
+            <div class="cmd-head"><span class="pill pill-ok">human attestation</span></div>
+            <p class="cmd-body"><code>/dp:signoff</code> is the human stating, on the record, that they reviewed and validated the flow themselves. <b>No rubber-stamping.</b></p>
+          </div>
+        </div>
+
+        <div class="callout tip" style="margin-top:16px">
+          <span class="ci"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/></svg></span>
+          <p><b>The toolkit keeps improving in place</b> via a documented <b>hardening loop</b>: every new finding is captured back into the reference files, so the next migration starts smarter than the last.</p>
+        </div>
+      </section>
+
+      <!-- ============ FOOTER ============ -->
+      <div class="footer">
+        <div>Generated manual — <b>the repo is the source of truth.</b></div>
+        <div class="ver">[ version / date placeholder ]</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------- Theme toggle ---------- */
+  var root = document.documentElement;
+  var tBtn = document.getElementById("themeToggle");
+  var tLabel = document.getElementById("themeLabel");
+  var tIcon = document.getElementById("themeIcon");
+  var SUN = '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>';
+  var MOON = '<path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z"/>';
+  function applyTheme(t) {
+    root.setAttribute("data-theme", t);
+    var dark = t === "dark";
+    tLabel.textContent = dark ? "Light" : "Dark";
+    tIcon.innerHTML = dark ? MOON : SUN;
+    try { localStorage.setItem("dpkit-theme", t); } catch (e) {}
+  }
+  var saved = null;
+  try { saved = localStorage.getItem("dpkit-theme"); } catch (e) {}
+  applyTheme(saved || "light");
+  tBtn.addEventListener("click", function () {
+    applyTheme(root.getAttribute("data-theme") === "dark" ? "light" : "dark");
+  });
+
+  /* ---------- Mobile sidebar ---------- */
+  var sidebar = document.getElementById("sidebar");
+  var overlay = document.getElementById("overlay");
+  var menuBtn = document.getElementById("menuBtn");
+  function closeNav() { sidebar.classList.remove("open"); overlay.classList.remove("show"); }
+  menuBtn.addEventListener("click", function () {
+    sidebar.classList.toggle("open"); overlay.classList.toggle("show");
+  });
+  overlay.addEventListener("click", closeNav);
+
+  /* ---------- Smooth nav + close on mobile ---------- */
+  var navLinks = Array.prototype.slice.call(document.querySelectorAll(".nav a"));
+  navLinks.forEach(function (a) {
+    a.addEventListener("click", function () { if (window.innerWidth <= 980) closeNav(); });
+  });
+
+  /* ---------- Scroll-spy ---------- */
+  var sections = Array.prototype.slice.call(document.querySelectorAll("section.doc"));
+  var byId = {};
+  navLinks.forEach(function (a) { byId[a.getAttribute("href").slice(1)] = a; });
+  var spy = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (e.isIntersecting) {
+        navLinks.forEach(function (l) { l.classList.remove("active"); });
+        var link = byId[e.target.id];
+        if (link) link.classList.add("active");
+      }
+    });
+  }, { rootMargin: "-45% 0px -50% 0px", threshold: 0 });
+  sections.forEach(function (s) { spy.observe(s); });
+
+  /* ---------- Search / filter ---------- */
+  var search = document.getElementById("navSearch");
+  var navEmpty = document.getElementById("navEmpty");
+  function norm(s) { return (s || "").toLowerCase(); }
+  search.addEventListener("input", function () {
+    var q = norm(search.value.trim());
+    var anyVisible = false;
+    sections.forEach(function (sec) {
+      var hay = norm(sec.getAttribute("data-title") + " " + sec.textContent);
+      var match = q === "" || hay.indexOf(q) !== -1;
+      sec.classList.toggle("filtered-out", !match);
+      var link = byId[sec.id];
+      if (link) link.parentElement.style.display = match ? "" : "none";
+      if (match) anyVisible = true;
+    });
+    navEmpty.style.display = anyVisible ? "none" : "block";
+  });
+  // Escape clears
+  search.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") { search.value = ""; search.dispatchEvent(new Event("input")); search.blur(); }
+  });
+})();
+</script>
+</body>
+</html>

@@ -15,6 +15,7 @@ you hand it to lines of business — see [GUIDE.md](GUIDE.md) §7b.
 > **The team owns the migration. Gemini assists; humans validate and sign off.**
 
 > **Setting up to use it today? → [SETUP.md](SETUP.md).** Prereqs, config, first run.
+> **Want the visual manual? → [docs/operators-guide.html](docs/operators-guide.html).** Open it in a browser — a self-contained operator's guide.
 > **Want to understand how it works? → [GUIDE.md](GUIDE.md).** End to end.
 > **Keeping it improving (the hardening loop) → [MAINTAINING.md](MAINTAINING.md).** For the team and for Gemini.
 
