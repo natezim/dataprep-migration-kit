@@ -1,183 +1,49 @@
-# GEMINI.md — Dataprep Migration project rules
+# GEMINI.md — dev context for evolving this project
 
-Project-scoped rules for migrating Dataprep (Trifacta) flows into BigQuery SQL or Python.
-Auto-loaded when Gemini CLI runs from this folder. The global starter-kit `~/.gemini/GEMINI.md`
-(if installed) applies on top — this file does not replace it, only adds migration rules.
+You are an engineering collaborator helping evolve the **Dataprep → BigQuery Migration Kit**.
+This file is the *development* context (auto-loaded at the repo root). It is NOT the toolkit's
+runtime rules — those live in [`toolkit/GEMINI.md`](toolkit/GEMINI.md) and load when migrations
+are run from inside `toolkit/`.
 
-## Mission
+## What this project is
 
-Translate exported Dataprep recipe JSON into maintainable, commented BigQuery assets, and
-prove each one matches the legacy Dataprep output before promoting it. Repeatable golden
-path; output readable enough for lines of business to maintain.
+A self-contained Gemini CLI toolkit (in `toolkit/`) that migrates Dataprep (Trifacta) flows into
+maintainable, single-file BigQuery SQL — one flow at a time, verified against the legacy output,
+without ever modifying Dataprep or production. Read [`HANDOFF.md`](HANDOFF.md) for the full
+picture and current status before making changes.
 
-## Work discipline — ONE flow at a time (hard rule)
+## The toolkit lives in `toolkit/` — where to change what
 
-This is the most important rule. The migration is sequential, not bulk.
-
-- **Migrate exactly ONE flow, end-to-end, before starting another.** End-to-end =
-  translate → compile/dry-run → parity-verify → document → commit. Only then pick the next.
-- **Never bulk-migrate.** If asked to "migrate everything" / "do all the flows," refuse the
-  bulk action: explain why, then migrate the FIRST one only and report back.
-- **The only bulk-allowed step is discovery** (`@flow-inventory` across the exported recipes) — it
-  is read-only and just builds the backlog + status tracker. Translation and promotion are one-at-a-time.
-- **Finish in-progress work first.** On resume, complete any flow marked `In process` in
-  `status/migration_status.csv` before starting a new one.
-- Work a **Plan** by planning it out, then migrating its flows one at a time in dependency order.
-- Keep the workspace clean: scratch goes in `output/temp/`; nothing at the folder root; every
-  new file has a home per File discipline below.
-
-## Targets — SQL-first (Python is a rare exception)
-
-- **BigQuery Standard SQL is the PRIMARY lane.** Every flow targets SQL unless SQL literally
-  cannot express the logic.
-- **Primary deliverable: ONE self-contained `flows/<plan>/<flow>/<flow>.sql`** — a clean,
-  console-runnable file (Create-Execute-Clean; config-free, run-instructions header). A
-  `<flow>.sqlx` Dataform wrapper is **OPTIONAL**, only when you want scheduled orchestration.
-- **Python is a RARE exception** (`flows/<plan>/<flow>/<flow>.py`) — only when SQL can't express
-  the logic (heavy regex, row-wise/iterative, fuzzy match, ML/Vertex). Not first-class; justify it.
-
-## Translation rules
-
-- **Transpile-first.** Wrangle is a finite declarative DSL, so migration is transpilation:
-  apply the reviewed **transform dictionary** (one known SQL/Python pattern per step) plus
-  **pushdown-SQL reuse** for BigQuery-source flows. That dictionary is the engine.
-- **Native gen is a rare optional accelerator, not the default.** `POST
-  /v4/outputObjects/<id>/wrangleToPython` is **deprecated (R9.7)**, Enterprise-only, CSV-only,
-  no multi-dataset, behind an experimental flag. Use it only if it's available and clearly
-  helps; otherwise transpile. Either way, always reshape into our commented form.
-- **One CTE per legacy recipe node**, commented with its original recipe ID. **No `SELECT *` in
-  joins** — coalesce/cast/alias columns explicitly.
-- **Create-Execute-Clean lifecycle** for GCS-CSV sources (single self-contained script):
-  Phase 1 `CREATE OR REPLACE EXTERNAL TABLE EXT_*` on the GCS CSV (OPTIONS incl.
-  **`allow_quoted_newlines = true`**); Phase 2 `CREATE OR REPLACE TABLE STG_* AS <CTE graph>`;
-  Phase 3 `DROP EXTERNAL TABLE IF EXISTS` for every external at the bottom. BQ-native sources
-  skip the external phases and `ref()` directly. (See `references/dataform-conventions.md`.)
-- Never invent logic. If a step is ambiguous, flag it in the output and the report — do not guess.
-- **Defend against the five silent-corruption risks** (top parity-failure sources; see
-  `references/wrangle-to-python.md`):
-  1. **Temporal** — Dataprep dates are tz-naive strings; keep them tz-naive to avoid date-shift.
-  2. **Decimal** — cap precision at 38 digits (Alteryx allows 50; BQ/Spark cap at 38) or cast to string.
-  3. **Null propagation** — `coalesce`/`nullif`/`fillna` before any string concat or join.
-  4. **Date midnight** — `datetime_trunc(safe_cast(x as DATETIME), DAY)` to match Dataprep's
-     `yyyy-MM-dd` (BigQuery otherwise appends `00:00:00`).
-  5. **Trailing newlines** in quoted GCS fields — reproduce raw in strict parity; clean with
-     `trim(regexp_replace(col, '^"|"$', ''))` for promotion.
-
-## Parity audit — exact match, non-negotiable
-
-- **Frozen input.** Pin the source with BigQuery time-travel / a snapshot so both engines see
-  identical data; otherwise drift in the live source masquerades as a translation bug.
-- **4-tier diff**, escalating only as needed: (1) **schema** → (2) **row count** → (3) **MD5
-  row-hash** (compare row multisets) → (4) **cell-level** (the exact `(key, column)` coords).
-- Normalize legitimate diffs (e.g. tz-naive temporals, ordering); bar is **exact match** —
-  any undocumented difference fails the flow.
-- **Two modes.** Audit in **Strict Parity** mode: reproduce the legacy output EXACTLY, *including
-  its bugs* (e.g. uncleaned keys with trailing newlines, failed joins) — join on raw keys so the
-  new table is bit-for-bit identical to legacy. **Clean Promotion** is a separate, documented
-  post-pass (fix the legacy bugs) done only AFTER strict parity passes; it is never audited against legacy.
-- New output is written only to the **disposable staging dataset** (see Safety); legacy tables
-  are NEVER modified. New and legacy run side-by-side over a validation window before cutover.
-- Parity is target-agnostic — same check whether SQL or Python produced the table.
-
-## File discipline — ONE folder per flow
-
-Everything for a flow lives in `flows/<plan>/<flow>/`, created by Gemini one at a time with
-canonical names from catalog metadata — never pre-created or hand-named. Cross-flow tracking
-lives in `status/`. (No more parallel `context/`, `definitions/`, `output/queries`, `plans/` trees.)
-
-| Inside `flows/<plan>/<flow>/` | What |
+| To change… | Edit |
 |---|---|
-| `<flow>.sql` | **PRIMARY** — one self-contained, console-runnable BigQuery SQL |
-| `<flow>.sqlx` | OPTIONAL Dataform wrapper (scheduled orchestration only) |
-| `validation.sql` | a query the **user runs themselves** to compare new vs legacy |
-| `EXPLANATION.md` | plain-English: what / why / how to maintain / parity result |
-| `parity.md` · `governance.md` | audit evidence · governance result |
-| `recipe/` | exported recipe input (read-only, gitignored) |
-| `<flow>.py` | Python (rare exception only) |
+| A runtime rule the migration must always follow | `toolkit/GEMINI.md` |
+| A slash command (`/dp:start`, `/dp:migrate`, `/dp:signoff`) | `toolkit/.gemini/commands/dp/*.toml` |
+| An agent's behavior (`@flow-inventory`, `@recipe-translator`, `@parity-auditor`, `@governance`) | `toolkit/.gemini/agents/*.md` |
+| A Wrangle→SQL mapping, parity rule, API/env finding, output/governance standard | `toolkit/.gemini/skills/dataprep-migration/references/*.md` |
+| Discovery scripts | `toolkit/scripts/*.py` |
+| Human-facing docs | `toolkit/README.md`, `GUIDE.md`, `SETUP.md`, `CONTRIBUTING.md`, `MAINTAINING.md` |
 
-| Cross-flow | Where |
-|---|---|
-| Live status tracker (open directly — no server) | `status/migration_status.csv` (+ generated `.xlsx`) |
-| Ranked backlog | `status/backlog.md` |
-| Plan map | `flows/<plan>/README.md` |
+The capture-it-back-into-references workflow is in `toolkit/MAINTAINING.md` — follow it.
 
-- `recipe/` is READ-ONLY. Never write migrated logic at the repo root. Scratch → `output/temp/`.
-- **Sanitize folder names: ≤60 chars, `[a-zA-Z0-9_.-]` only, no flow-ID suffixes** — Windows
-  `MAX_PATH` (260) truncates deep trees and silently fails extraction. See `references/windows-onedrive.md`.
+## How to make changes
 
-## Status lifecycle & governance — humans own this
+- **Small, focused commits.** One change = one commit with a clear message.
+- **Keep references concrete:** real Wrangle in, real SQL out, the gotcha noted.
+- **Update the docs you touch** so they don't drift (the toolkit's docs are the source of truth).
+- When you change behavior, say what you changed, where, and why.
 
-- Track every flow against the total inventory in `status/migration_status.csv`:
-  **Not started → In process → Validating → Parallel runs → Productionized.**
-- **Status changes are GATED.** Ask the user to confirm before advancing a flow's status —
-  especially into Validating / Parallel runs / Productionized. NEVER auto-advance.
-- **`@governance`** reviews a finished flow against the checklist (no hardcoding, header + inline
-  comments, single self-contained file, strict parity green, `validation.sql` + `EXPLANATION.md`
-  present, naming, read-only/staging) → `governance.md`. See `references/governance.md`.
-- **Productionized requires `/dp:signoff`** — the user must attest they independently REVIEWED the
-  SQL and ran their OWN validation. Gemini never self-promotes. The team is responsible regardless
-  of how it was built — no rubber-stamping.
+## Non-negotiables — do not let changes erode these
 
-## Output standards (hard rules — see `references/output-standards.md`)
+1. **One flow at a time.** Discovery (read-only inventory) is the only bulk step.
+2. **Dataprep is read-only** (only `GET` — list/export); **production is read-only** (SELECT-only).
+   All writes go to the disposable `dataprep_migration_staging` dataset.
+3. **No hard-coded values** ship — dates/params become `DECLARE` / `CURRENT_DATE()` / query params.
+4. **Exact-match parity on a frozen input.** Never weaken the audit to make a flow pass.
+5. **Never auto-promote.** `Productionized` requires `/dp:signoff` — a human attestation. The team
+   owns the migration; Gemini assists, humans validate.
+6. **SQL-first, one self-contained file** per flow; Dataform `.sqlx` is optional.
 
-- **No hard-coded values.** Load/run dates and env-specific values become variables/params
-  (`DECLARE`, `CURRENT_DATE()`, query parameters, Dataform vars). Mandatory for automation.
-- **Heavy commenting.** File header (what/why/when/source/owner/parity) + an inline comment on
-  every CTE tracing to its recipe node. No `SELECT *` in joins.
-- **One self-contained `.sql` per flow** + a user-runnable `validation.sql` + an `EXPLANATION.md`.
-
-## Safety & access
-
-- **Dataprep is read-only — export only. The toolkit NEVER changes anything in Dataprep.**
-  Only reads are allowed: `GET /v4/flows`, `GET /v4/plans`, `GET /v4/flows/{id}/package`,
-  `GET /v4/jobGroups`. NEVER call any create/edit/delete/run endpoint (`replaceDataset`,
-  `POST /v4/outputObjects`, job triggers). Migration is one-directional: logic flows OUT of
-  Dataprep; nothing alters a flow, recipe, dataset, output, or schedule.
-- **Discovery query params (or the catalog silently truncates):** append `limit=250` to every
-  list call, and `flowsFilter=all` / `plansFilter=all` to see team-shared + ex-employee flows
-  (default scope is only the token owner's). Map plan runs via the embedded `latestPlanSnapshotRun`
-  on each plan — NOT `/v4/planSnapshotRuns`. See `references/dataprep-api.md`.
-- **Production (BigQuery) is read-only.** SELECT-only against source/legacy tables — never DDL/DML.
-- **All writes go to one disposable staging dataset, `dataprep_migration_staging`**, created
-  with a default table expiration so it self-cleans, and deleted at teardown. A **write-guard
-  refuses any write whose destination isn't that dataset.**
-- **gcloud is NOT required.** Access via the Python `google-cloud-bigquery` client with browser
-  OAuth, or via the BigQuery console / Dataform UI.
-- **API-optional.** The Dataprep API (`GET /v4/flows/{id}/package`, `GET /v4/flows`) is the fast
-  path, but the UI "Export Flow" button yields the identical ZIP — LOB users with no API access
-  are fully supported.
-- Reads, dry-runs, compiles → proceed. Running a model into the staging dataset → fine.
-  Anything touching a **legacy / production** table, or a write outside the staging dataset
-  (CRITICAL) → hard stop, show the full plan, require explicit yes.
-- Always BigQuery dry-run before a real run; warn if estimated scan is large.
-
-## Where this lives — git workflow
-
-The project is version-controlled with **git**. This works the same whether or not a remote
-(GitHub or GitLab) exists yet — start local, add the remote later with zero rework.
-
-- **No remote yet?** Run `git init` here and commit. You get full history/rollback today, on
-  one machine. When a remote is ready: `git remote add origin <url>` and `git push` — the whole
-  history goes with it. Nothing to redo.
-- **One flow = one branch = one commit (or MR).** Before migrating a flow, create a branch
-  `migrate/<plan>-<flow>`. Do the full end-to-end migration on it. Commit when parity is green.
-  This makes every flow individually reviewable and keeps the trunk clean.
-- **Do NOT** put the git repo inside a OneDrive/SharePoint-synced folder — syncing the `.git`
-  directory corrupts it. Use git for the project; share read-only artifacts (the dashboard,
-  reports) via SharePoint/Teams separately.
-- Gemini syncs via git: `git pull` to start, `git commit`/`git push` to save. Needs git
-  credentials configured once (token or SSH key).
-- `.gitignore` already keeps secrets (`.env`), raw exports, and `output/temp/` out of the repo.
-
-## Agents
-
-- `@flow-inventory` — recipe package → backlog + dependency graph + complexity. Writes `status/`. Read-only on Dataprep.
-- `@recipe-translator` — recipe → one commented `<flow>.sql` (+ validation.sql, EXPLANATION.md). Writes `flows/<plan>/<flow>/`.
-- `@parity-auditor` — frozen-input 4-tier diff in staging → `parity.md` + `validation.sql`. Read-only on legacy.
-- `@governance` — readiness checklist on a finished flow → `governance.md`. Read-only.
-
-## Commands
-
-- `/dp:start` — orient/resume: shows status, enforces one-flow-at-a-time, helps pick the next.
-- `/dp:migrate <flow>` — the golden path for ONE flow: inventory → translate → verify → govern → document.
-- `/dp:signoff <flow>` — human attests independent review + validation → status Productionized.
+## Platform note
+Built/tested on Windows (PowerShell). Watch the known gotchas in
+`toolkit/.gemini/skills/dataprep-migration/references/windows-onedrive.md` (MAX_PATH, file locks).
+Don't put the git repo inside a OneDrive/SharePoint-synced folder.

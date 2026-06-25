@@ -1,13 +1,13 @@
-# Secrets — never commit
-.env
+# Secrets — never commit (any .env at any depth, e.g. toolkit/.env)
+**/.env
 *.token
 
 # Raw Dataprep exports (real business logic) — the per-flow recipe/ inputs stay out of git.
-flows/**/recipe/
+toolkit/flows/**/recipe/
 
 # Scratch + intermediate script output. (status/ and each flow's .sql/EXPLANATION/parity ARE committed.)
-output/data/
-output/temp/
+toolkit/output/data/
+toolkit/output/temp/
 
 # OS / editor cruft
 .DS_Store
